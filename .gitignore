@@ -43,3 +43,4 @@ ROADMAP.md
 # DESIGNDOCS
 DESIGN.md
 theme.css
+/src/generated/prisma
