@@ -38,7 +38,7 @@ next-env.d.ts
 # AI instructions & planning docs
 ANTIGRAVITY.md
 ROADMAP.md
-.clinerules
+instructions.md
 
 # DESIGNDOCS
 DESIGN.md
