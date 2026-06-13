@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -20,6 +22,7 @@ type Repo = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,6 +35,24 @@ export default function DashboardPage() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  async function handleSelect(repo: Repo) {
+    const res = await fetch("/api/repos/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        githubRepoId: repo.id,
+        name: repo.name,
+        owner: repo.owner.login,
+        fullName: repo.full_name,
+        isPrivate: repo.private,
+      }),
+    });
+
+    if (res.ok) {
+      router.push(`/dashboard/${repo.owner.login}/${repo.name}`);
+    }
+  }
 
   if (loading) {
     return (
@@ -74,6 +95,14 @@ export default function DashboardPage() {
                   </p>
                 )}
               </CardContent>
+              <CardFooter>
+                <button
+                  onClick={() => handleSelect(repo)}
+                  className="w-full rounded-lg bg-brand-teal px-4 py-2 text-sm font-medium text-white transition-all hover:brightness-110"
+                >
+                  このリポジトリを使う
+                </button>
+              </CardFooter>
             </Card>
           </ScrollReveal>
         ))}
