@@ -1,5 +1,6 @@
-"use client"; // Motion（アニメーション）を使うために必要
+"use client";
 
+import { useEffect, useState } from "react";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import {
   Card,
@@ -8,27 +9,38 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-// モックデータ
-const mockRepos = [
-  {
-    id: 1,
-    name: "my-portfolio",
-    owner: { login: "taro-yamada" },
-    full_name: "taro-yamada/my-portfolio",
-    private: false,
-    description: "My portfolio site",
-  },
-  {
-    id: 2,
-    name: "secret-project",
-    owner: { login: "taro-yamada" },
-    full_name: "taro-yamada/secret-project",
-    private: true,
-    description: "Internal tool",
-  },
-];
+
+type Repo = {
+  id: number;
+  name: string;
+  owner: { login: string };
+  full_name: string;
+  private: boolean;
+  description: string | null;
+};
 
 export default function DashboardPage() {
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/repos")
+      .then((res) => res.json())
+      .then((data) => {
+        setRepos(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-zinc-500">リポジトリを読み込み中...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
       <ScrollReveal>
@@ -39,7 +51,7 @@ export default function DashboardPage() {
       </ScrollReveal>
 
       <div className="grid gap-4">
-        {mockRepos.map((repo) => (
+        {repos.map((repo) => (
           <ScrollReveal key={repo.id}>
             <Card>
               <CardHeader>
