@@ -68,7 +68,14 @@ export default function DashboardPage() {
           </div>
           <span className="text-sm font-medium text-midnight-ink">CommitHyper</span>
         </Link>
-        {user && (
+        <div className="flex items-center gap-4">
+          <Link
+            href="/guide"
+            className="text-xs text-zinc-400 hover:text-zinc-600"
+          >
+            ガイド
+          </Link>
+          {user && (
           <button onClick={() => signOut()} className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
             {user.avatarUrl && (
               <img src={user.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
@@ -76,6 +83,7 @@ export default function DashboardPage() {
             {user.name}
           </button>
         )}
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-16">

@@ -159,6 +159,13 @@ export default function DashboardPage() {
           <span className="text-sm font-medium text-zinc-600">
             {owner}/{name}
           </span>
+          <div className="h-4 w-px bg-zinc-200" />
+          <Link
+            href="/guide"
+            className="text-xs text-zinc-400 hover:text-zinc-600"
+          >
+            ガイド
+          </Link>
         </div>
         <div className="flex items-center gap-3">
           {progress && (
