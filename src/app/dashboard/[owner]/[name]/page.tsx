@@ -22,16 +22,27 @@ export default function CommitPage() {
 
   const [commits, setCommits] = useState<Commit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function loadCommits(forceRefresh = false) {
+    const url = forceRefresh
+      ? `/api/repos/${owner}/${name}/commits?refresh=true`
+      : `/api/repos/${owner}/${name}/commits`;
+    const res = await fetch(url);
+    const data = await res.json();
+    setCommits(Array.isArray(data) ? data : []);
+    setLoading(false);
+    setRefreshing(false);
+  }
 
   useEffect(() => {
-    fetch(`/api/repos/${owner}/${name}/commits`)
-      .then((res) => res.json())
-      .then((data) => {
-        setCommits(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    loadCommits();
   }, [owner, name]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await loadCommits(true);
+  }
 
   if (loading) {
     return (
@@ -44,12 +55,23 @@ export default function CommitPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
       <ScrollReveal>
-        <h1 className="mb-2 text-2xl font-semibold">
-          {owner}/{name}
-        </h1>
-        <p className="mb-8 text-zinc-500">
-          全{commits.length}件のコミット
-        </p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">
+              {owner}/{name}
+            </h1>
+            <p className="mt-2 text-zinc-500">
+              全{commits.length}件のコミット
+            </p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="shrink-0 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-all hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {refreshing ? "再読み込み中..." : "再読み込み"}
+          </button>
+        </div>
       </ScrollReveal>
 
       <div className="space-y-3">
