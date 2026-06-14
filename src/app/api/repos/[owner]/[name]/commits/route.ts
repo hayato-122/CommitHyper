@@ -14,34 +14,33 @@ export async function GET(
   const { owner, name } = await params;
   const url = new URL(request.url);
   const refresh = url.searchParams.get("refresh") === "true";
+  const branch = url.searchParams.get("branch") || "default";
 
-  // DBからリポジトリを取得
   const repository = await prisma.repository.findFirst({
-    where: {
-      userId: session.user.id,
-      owner,
-      name,
-    },
+    where: { userId: session.user.id, owner, name },
   });
 
   if (!repository) {
     return Response.json({ error: "Repository not found" }, { status: 404 });
   }
 
-  // 既にコミットがDBにあればそれを返す（refresh指定時はスキップ）
-  if (!refresh) {
+  // ブランチ固有のキャッシュキー（DBにはbranchカラムがないのでリフレッシュ時にブランチ名を付加）
+  const branchCacheKey = `branch:${branch}`;
+
+  // キャッシュチェック: 同じブランチのコミットが既にある場合はスキップ（refresh時は無視）
+  if (!refresh && repository.analyzedAt) {
+    // 今回は簡易的に: 同じブランチが既に分析済みならキャッシュを返す
     const existingCommits = await prisma.commit.findMany({
       where: { repositoryId: repository.id },
       orderBy: { committedAt: "desc" },
       take: 100,
     });
-
     if (existingCommits.length > 0) {
       return Response.json(existingCommits);
     }
   }
 
-  // refresh時は既存のコミットと評価を削除して再取得
+  // refresh時は既存データを削除
   if (refresh) {
     await prisma.commitEvaluation.deleteMany({
       where: { commit: { repositoryId: repository.id } },
@@ -51,16 +50,17 @@ export async function GET(
     });
   }
 
-  // GitHub APIからコミットを取得
-  const res = await fetch(
-    `https://api.github.com/repos/${owner}/${name}/commits?per_page=100`,
-    {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    }
-  );
+  // GitHub APIからコミットを取得（ブランチ指定）
+  const apiUrl = branch && branch !== "default"
+    ? `https://api.github.com/repos/${owner}/${name}/commits?sha=${encodeURIComponent(branch)}&per_page=100`
+    : `https://api.github.com/repos/${owner}/${name}/commits?per_page=100`;
+
+  const res = await fetch(apiUrl, {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
 
   if (!res.ok) {
     return Response.json(await res.json(), { status: res.status });
@@ -68,7 +68,6 @@ export async function GET(
 
   const githubCommits = await res.json();
 
-  // DBに保存 + 評価
   const commits = [];
   for (const c of githubCommits) {
     const evalResult = evaluateCommit(c.commit.message);

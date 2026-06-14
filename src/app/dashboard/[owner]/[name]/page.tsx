@@ -51,6 +51,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState("default");
 
   const loadCandidates = useCallback(
     async (currentPage: number) => {
@@ -64,16 +66,30 @@ export default function DashboardPage() {
   );
 
   const loadAllCommits = useCallback(
-    async (forceRefresh = false) => {
-      const url = forceRefresh
-        ? `/api/repos/${owner}/${name}/commits?refresh=true`
-        : `/api/repos/${owner}/${name}/commits`;
+    async (forceRefresh = false, branch?: string) => {
+      const b = branch ?? selectedBranch;
+      const params = new URLSearchParams();
+      if (forceRefresh) params.set("refresh", "true");
+      if (b && b !== "default") params.set("branch", b);
+      const qs = params.toString();
+      const url = `/api/repos/${owner}/${name}/commits${qs ? `?${qs}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
       setAllCommits(Array.isArray(data) ? data : []);
     },
-    [owner, name]
+    [owner, name, selectedBranch]
   );
+
+  const loadBranches = useCallback(async () => {
+    const res = await fetch(`/api/repos/${owner}/${name}/branches`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setBranches(data);
+        setSelectedBranch(data[0]);
+      }
+    }
+  }, [owner, name]);
 
   const loadProgress = useCallback(async () => {
     const res = await fetch("/api/user/progress");
@@ -87,7 +103,7 @@ export default function DashboardPage() {
     let cancelled = false;
     async function init() {
       setLoading(true);
-      await Promise.all([loadCandidates(1), loadAllCommits(), loadProgress()]);
+      await Promise.all([loadCandidates(1), loadAllCommits(), loadBranches(), loadProgress()]);
       if (!cancelled) setLoading(false);
     }
     init();
@@ -109,6 +125,17 @@ export default function DashboardPage() {
     if (newPage < 1 || (candidates && newPage > candidates.totalPages)) return;
     setPage(newPage);
     loadCandidates(newPage);
+  }
+
+  async function handleBranchChange(branch: string) {
+    setSelectedBranch(branch);
+    setPage(1);
+    setLoading(true);
+    await Promise.all([
+      loadAllCommits(true, branch),
+      loadCandidates(1),
+    ]);
+    setLoading(false);
   }
 
   async function handleRefresh() {
@@ -159,6 +186,20 @@ export default function DashboardPage() {
           <span className="text-sm font-medium text-zinc-600">
             {owner}/{name}
           </span>
+          {branches.length > 0 && (
+            <>
+              <div className="h-4 w-px bg-zinc-200" />
+              <select
+                value={selectedBranch}
+                onChange={(e) => handleBranchChange(e.target.value)}
+                className="max-w-[140px] truncate rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+              >
+                {branches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </>
+          )}
           <div className="h-4 w-px bg-zinc-200" />
           <Link
             href="/guide"
