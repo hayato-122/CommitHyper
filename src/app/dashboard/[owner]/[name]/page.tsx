@@ -5,7 +5,7 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { ScrollReveal } from "@/components/ScrollReveal";
-import { GitCommitHorizontal, ArrowLeft, RotateCw } from "lucide-react";
+import { GitCommitHorizontal, ArrowLeft, RotateCw, ArrowUpDown } from "lucide-react";
 
 type Commit = {
   id: string;
@@ -53,6 +53,8 @@ export default function DashboardPage() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [selectedBranch, setSelectedBranch] = useState("default");
+  const [sortBy, setSortBy] = useState<"score" | "date">("score");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const loadCandidates = useCallback(
     async (currentPage: number) => {
@@ -124,6 +126,18 @@ export default function DashboardPage() {
     if (newPage < 1 || (candidates && newPage > candidates.totalPages)) return;
     setPage(newPage);
     loadCandidates(newPage);
+  }
+
+  function sortCommits(list: Commit[]) {
+    return [...list].sort((a, b) => {
+      let cmp: number;
+      if (sortBy === "score") {
+        cmp = a.currentScore - b.currentScore;
+      } else {
+        cmp = new Date(a.committedAt).getTime() - new Date(b.committedAt).getTime();
+      }
+      return sortOrder === "asc" ? cmp : -cmp;
+    });
   }
 
   async function handleBranchChange(branch: string) {
@@ -251,16 +265,43 @@ export default function DashboardPage() {
                 すべてのコミット
               </button>
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-50"
-            >
-              <RotateCw
-                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-              再分析
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="flex overflow-hidden rounded-lg border border-zinc-300">
+                <button
+                  onClick={() => setSortBy("score")}
+                  className={`px-3 py-1.5 text-xs font-medium transition-all ${
+                    sortBy === "score" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"
+                  }`}
+                >
+                  スコア
+                </button>
+                <button
+                  onClick={() => setSortBy("date")}
+                  className={`px-3 py-1.5 text-xs font-medium transition-all ${
+                    sortBy === "date" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"
+                  }`}
+                >
+                  日付
+                </button>
+              </div>
+              <button
+                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-all hover:bg-zinc-50"
+              >
+                <ArrowUpDown className="mr-1 inline h-3 w-3" />
+                {sortOrder === "asc" ? "昇順" : "降順"}
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <RotateCw
+                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+                再分析
+              </button>
+            </div>
           </div>
 
           {/* Candidates tab */}
@@ -278,7 +319,7 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <div className="grid gap-4">
-                    {candidates?.commits.map((commit) => (
+                    {sortCommits(candidates?.commits ?? []).map((commit) => (
                       <ScrollReveal key={commit.id}>
                         <div className="rounded-xl border border-zinc-200 bg-white p-5">
                           <div className="mb-3">
@@ -353,7 +394,7 @@ export default function DashboardPage() {
           {/* All commits tab */}
           {tab === "all" && (
             <div className="space-y-3">
-              {allCommits.map((commit) => (
+              {sortCommits(allCommits).map((commit) => (
                 <ScrollReveal key={commit.id}>
                   <div className="rounded-xl border border-zinc-200 bg-white p-4">
                     <div className="flex gap-4">
