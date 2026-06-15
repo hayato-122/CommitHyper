@@ -67,17 +67,16 @@ export default function DashboardPage() {
 
   const loadAllCommits = useCallback(
     async (forceRefresh = false, branch?: string) => {
-      const b = branch ?? selectedBranch;
       const params = new URLSearchParams();
       if (forceRefresh) params.set("refresh", "true");
-      if (b && b !== "default") params.set("branch", b);
+      if (branch && branch !== "default") params.set("branch", branch);
       const qs = params.toString();
       const url = `/api/repos/${owner}/${name}/commits${qs ? `?${qs}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
       setAllCommits(Array.isArray(data) ? data : []);
     },
-    [owner, name, selectedBranch]
+    [owner, name]
   );
 
   const loadBranches = useCallback(async () => {
@@ -357,7 +356,7 @@ export default function DashboardPage() {
               {allCommits.map((commit) => (
                 <ScrollReveal key={commit.id}>
                   <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex gap-4">
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-xs text-zinc-400">
                           {commit.sha.slice(0, 7)}
@@ -370,15 +369,27 @@ export default function DashboardPage() {
                           {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
                         </p>
                       </div>
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          commit.currentScore < 70
-                            ? "bg-red-50 text-red-600"
-                            : "bg-emerald-50 text-emerald-700"
-                        }`}
-                      >
-                        {commit.currentScore}
-                      </span>
+                      <div className="flex flex-col items-end justify-between">
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            commit.currentScore < 70
+                              ? "bg-red-50 text-red-600"
+                              : "bg-emerald-50 text-emerald-700"
+                          }`}
+                        >
+                          {commit.currentScore}
+                        </span>
+                        <button
+                          onClick={() =>
+                            router.push(
+                              `/dashboard/${owner}/${name}/improve/${commit.id}`
+                            )
+                          }
+                          className="rounded-lg bg-brand-teal px-2.5 py-1 text-xs font-medium text-white transition-all hover:brightness-110"
+                        >
+                          改善する
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </ScrollReveal>
