@@ -29,7 +29,7 @@ export async function GET(
     currentScore: { lt: 70 },
   };
 
-  const [totalCount, commits] = await Promise.all([
+  const [totalCount, rawCommits] = await Promise.all([
     prisma.commit.count({ where }),
     prisma.commit.findMany({
       where,
@@ -39,8 +39,17 @@ export async function GET(
       ],
       take: perPage,
       skip: (page - 1) * perPage,
+      include: { evaluations: { orderBy: { evaluatedAt: "desc" }, take: 1 } },
     }),
   ]);
+
+  const commits = rawCommits.map((c) => ({
+    ...c,
+    firstIssue: c.evaluations?.[0]?.issues
+      ? (JSON.parse(c.evaluations[0].issues) as string[])[0] ?? null
+      : null,
+    exampleMessage: c.evaluations?.[0]?.exampleMessage ?? null,
+  }));
 
   const totalPages = Math.ceil(totalCount / perPage);
 

@@ -16,6 +16,8 @@ type Commit = {
   initialScore: number;
   currentScore: number;
   status: string;
+  firstIssue?: string | null;
+  exampleMessage?: string | null;
 };
 
 type CandidatesResponse = {
@@ -268,6 +270,9 @@ export default function DashboardPage() {
                               </span>
                             </div>
                           </div>
+                          {commit.firstIssue && (
+                            <p className="mb-3 text-xs text-zinc-500">💡 {commit.firstIssue}</p>
+                          )}
                           <div className="flex gap-2 border-t border-zinc-100 pt-3">
                             <button onClick={() => router.push(`/dashboard/${owner}/${name}/improve/${commit.id}`)}
                               className="flex-1 rounded-lg bg-brand-teal px-4 py-2 text-sm font-medium text-white transition-all hover:brightness-110">
@@ -306,6 +311,11 @@ export default function DashboardPage() {
                         <p className="mt-2 text-xs text-zinc-500">
                           {commit.authorName} · {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
                         </p>
+                        {"firstIssue" in commit && commit.firstIssue && (
+                          <p className="mt-2 text-xs text-red-500 line-clamp-1">
+                            ⚠ {(commit as { firstIssue: string }).firstIssue}
+                          </p>
+                        )}
                       </div>
                       <div className="flex flex-col items-end justify-between">
                         <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${commit.currentScore < 70 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"}`}>

@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { GitCommitHorizontal } from "lucide-react";
+import { GitCommitHorizontal, Clipboard, Download, X, Check } from "lucide-react";
 import { ScrollReveal } from "@/components/ScrollReveal";
 
 const VALID_TYPES = [
@@ -26,7 +27,139 @@ const CRITERIA = [
   { name: "業務での追跡しやすさ", points: 10, desc: "scopeやIssue番号など、追跡に役立つ情報があるか" },
 ];
 
+function PromptModal({ onClose }: { onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const promptContent = `# CommitHyper: AI Commit Message Generator
+
+あなたはGitリポジトリのコミットメッセージを生成するアシスタントです。
+以下のルールに従い、与えられたdiffに最適なコミットメッセージを日本語で1つだけ生成してください。
+
+## 形式
+
+すべてのコミットメッセージは以下の形式に従ってください：
+
+\`\`\`
+type(scope): summary
+\`\`\`
+
+### type（変更の種類）
+
+- feat — 新機能
+- fix — バグ修正
+- docs — ドキュメントのみの変更
+- refactor — リファクタリング（機能追加・バグ修正なし）
+- test — テストの追加・修正
+- style — コードの意味に影響しない変更（空白・フォーマット等）
+- chore — ビルドプロセス・ツール・依存関係の変更
+- build — ビルドシステム・外部依存関係の変更
+- ci — CI設定・スクリプトの変更
+- perf — パフォーマンス改善
+
+### scope（省略可）
+影響範囲（auth, ui, api, db, config など）
+
+### summary（要約）
+- 日本語で書く
+- 語尾は「〜する」または「〜した」（一貫性を推奨）
+- 10〜72文字に収める
+- 「何を変更したか」を具体的に伝える
+
+### body（必要に応じて）
+- diffが複数ファイルにわたる場合、summaryの後に空行→箇条書きで詳細を補足
+- 「なぜ変更したか」も含めるとなお良い
+
+## 良い例
+
+feat(auth): GitHubログインボタンを追加する
+fix(ui): ボタンのホバー色を修正した
+refactor(db): クエリのN+1問題を解消する
+
+## 悪い例（絶対に避ける）
+
+fix bug
+バグを修正
+update
+変更
+
+## 評価ポイント
+
+1. type(scope): summary の形式に従っていること
+2. type が変更内容と一致していること
+3. summary が具体的であること
+4. 「なぜ」が必要なら body で補足すること
+5. 1行目は10〜72文字に収めること
+6. scope や Issue番号など、追跡に役立つ情報を含めること
+
+## 指示
+
+以下のdiffを確認し、上記のルールに従ったコミットメッセージを1つだけ生成してください。
+理由などの余計な説明は不要です。コミットメッセージのみを出力してください。`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(promptContent);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        onClose();
+      }, 1500);
+    } catch {
+      // fallback for older browsers
+      const textarea = document.createElement("textarea");
+      textarea.value = promptContent;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        onClose();
+      }, 1500);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="mx-4 w-full max-w-[640px] rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-midnight-ink">プロンプトをコピー</h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <pre className="mb-5 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl bg-zinc-50 p-4 text-xs leading-relaxed text-zinc-700">
+          {promptContent}
+        </pre>
+        <button
+          onClick={handleCopy}
+          className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+            copied
+              ? "bg-emerald-500 text-white"
+              : "bg-brand-teal text-white hover:brightness-110"
+          }`}
+        >
+          {copied ? (
+            <>
+              <Check className="h-4 w-4" />
+              コピーしました！
+            </>
+          ) : (
+            <>
+              <Clipboard className="h-4 w-4" />
+              <span>クリップボードにコピー</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function GuidePage() {
+  const [showModal, setShowModal] = useState(false);
+
   return (
     <div className="flex min-h-screen flex-col bg-pearl">
       <header className="flex h-14 items-center border-b border-mist bg-white px-6">
@@ -95,7 +228,7 @@ export default function GuidePage() {
               より読みやすくなります。
             </p>
             <div className="mt-6 rounded-3xl border border-mist bg-white p-6">
-              <div className="rounded-xl bg-peat p-4">
+              <div className="rounded-xl bg-pearl p-4">
                 <p className="text-sm font-medium text-zinc-500">完全なコミットメッセージの例</p>
                 <div className="mt-2 space-y-1">
                   <code className="block text-sm text-brand-teal">feat(auth): GitHubログインボタンを追加する</code>
@@ -198,55 +331,40 @@ export default function GuidePage() {
                   </div>
                   <div>
                     <code className="block rounded-xl bg-emerald-50 px-4 py-2.5 text-body-sm text-emerald-700">
-                      refactor(db): ユーザー検索を別関数に抽出
+                      refactor(db): クエリのN+1問題を解消する
                     </code>
                     <p className="mt-1 text-caption text-zinc-500">
-                      「〜する」を省略した形。簡潔で読みやすい
-                    </p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-emerald-50 px-4 py-2.5 text-body-sm text-emerald-700">
-                      docs(readme): インストール手順を更新
-                    </code>
-                    <p className="mt-1 text-caption text-zinc-500">
-                      「〜する」を省略した形。やや長めの要約でもOK
+                      scope に db を指定。何を直したか一目でわかる
                     </p>
                   </div>
                 </div>
-                <p className="mt-5 text-caption text-zinc-400">
-                  ※ 語尾は「〜する」でも「〜した」でも、命令形でも構いません。一貫性が大切です。
-                </p>
               </div>
               <div className="rounded-2xl border border-red-200 bg-white p-6">
-                <p className="mb-3 text-sm font-semibold text-red-500">悪い例 — 何を変えたか全く伝わらない</p>
+                <p className="mb-3 text-sm font-semibold text-red-500">悪い例 — 何を変えたか不明確</p>
                 <div className="space-y-4">
                   <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">fix bug</code>
-                    <p className="mt-1 text-caption text-zinc-500">どのバグを直したのか不明。一見typeらしきものがあるが形式になっていない</p>
+                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">
+                      fix bug
+                    </code>
+                    <p className="mt-1 text-caption text-zinc-500">
+                      どのバグを何のために直したか不明。typeもなし
+                    </p>
                   </div>
                   <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">update</code>
-                    <p className="mt-1 text-caption text-zinc-500">何をupdateしたのか全く分からない</p>
+                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">
+                      バグを修正
+                    </code>
+                    <p className="mt-1 text-caption text-zinc-500">
+                      日本語のみ。何をどう修正したかわからない
+                    </p>
                   </div>
                   <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">修正</code>
-                    <p className="mt-1 text-caption text-zinc-500">日本語のみでtypeがない。何を修正したか不明</p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">いろいろ変更</code>
-                    <p className="mt-1 text-caption text-zinc-500">変更内容が曖昧で、レビューや障害調査で役立たない</p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">fix</code>
-                    <p className="mt-1 text-caption text-zinc-500">1単語だけでは何も伝わらない</p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">update file</code>
-                    <p className="mt-1 text-caption text-zinc-500">どのファイルをなぜupdateしたか不明瞭</p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">change</code>
-                    <p className="mt-1 text-caption text-zinc-500">英単語1語だけでは全く意味が伝わらない最悪の例</p>
+                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">
+                      update
+                    </code>
+                    <p className="mt-1 text-caption text-zinc-500">
+                      最もよくない例。何も伝わらない
+                    </p>
                   </div>
                 </div>
               </div>
@@ -254,50 +372,66 @@ export default function GuidePage() {
           </ScrollReveal>
         </section>
 
-        {/* Why section */}
+        {/* AI Tools Section at Bottom */}
         <section className="mt-16">
           <ScrollReveal>
             <h2 className="text-heading-sm font-semibold text-midnight-ink">
-              Why を書く重要性
+              AI・コーディングエージェントに渡す
             </h2>
-            <div className="mt-6 rounded-3xl border border-mist bg-white p-6">
-              <p className="text-body leading-relaxed text-zinc-600">
-                コミットメッセージには「何を」だけでなく「なぜ」変更したのかを書くことで、
-                後から見た人が変更の意図を理解できるようになります。
+            <p className="mt-2 text-body text-zinc-500">
+              ChatGPT/Claude に直接貼り付けるプロンプトと、コーディングエージェントにインポートするルールファイルを用意しています。
+            </p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              {/* Copy Prompt Card */}
+              <button
+                onClick={() => setShowModal(true)}
+                className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-zinc-300 bg-white p-5 text-left text-body-sm transition-all hover:border-zinc-400 hover:bg-zinc-50"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100">
+                  <Clipboard className="h-5 w-5 text-zinc-500" />
+                </div>
+                <div>
+                  <p className="font-medium text-zinc-600">プロンプトをコピー</p>
+                  <p className="text-caption text-zinc-400">ChatGPT/Claudeに渡す</p>
+                </div>
+              </button>
+
+              {/* Download Rules Card */}
+              <a
+                href="/prompts/commithyper.md"
+                download
+                className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-zinc-300 bg-white p-5 text-body-sm transition-all hover:border-zinc-400 hover:bg-zinc-50"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100">
+                  <Download className="h-5 w-5 text-zinc-500" />
+                </div>
+                <div>
+                  <p className="font-medium text-zinc-600">ルールをダウンロード</p>
+                  <p className="text-caption text-zinc-400">コーディングエージェント用</p>
+                </div>
+              </a>
+            </div>
+            <div className="mt-5 rounded-xl bg-zinc-50 p-4">
+              <p className="text-xs font-medium text-zinc-500">💡 使い方</p>
+              <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                このファイルをプロジェクトのルールディレクトリ（
+                <code className="rounded bg-zinc-200 px-1 text-[11px]">.cursor/rules/</code>
+                、
+                <code className="rounded bg-zinc-200 px-1 text-[11px]">.github/copilot-instructions.md</code>
+                など）に配置し、他のルールファイルから以下のように参照してください。
               </p>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-sm font-medium text-red-500">Why がない例</p>
-                  <code className="mt-1 block text-body-sm text-zinc-600">
-                    fix(api): タイムアウトを変更する
-                  </code>
-                  <p className="mt-1 text-caption text-zinc-400">
-                    なぜタイムアウトを変更したか不明
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-emerald-600">Why がある例</p>
-                  <code className="mt-1 block text-body-sm text-zinc-600">
-                    fix(api): LLMの応答遅延のためタイムアウトを30秒に延長する
-                  </code>
-                  <p className="mt-1 text-caption text-zinc-400">
-                    理由（LLMの応答が遅い）が明確
-                  </p>
-                </div>
-              </div>
+              <pre className="mt-2 rounded-lg bg-white p-3 text-xs leading-relaxed text-zinc-600">
+{`# プロジェクトルール例
+コミットメッセージを作成・評価する際は、
+必ず commithyper.md のルールに従ってください。
+評価基準・良い例・悪い例は commithyper.md を参照。`}
+              </pre>
             </div>
           </ScrollReveal>
         </section>
-
-        <div className="mt-16 text-center">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-2xl bg-brand-teal px-6 py-3 text-body-sm font-medium text-white transition-all hover:brightness-110"
-          >
-            ダッシュボードに戻る
-          </Link>
-        </div>
       </main>
+
+      {showModal && <PromptModal onClose={() => setShowModal(false)} />}
     </div>
   );
 }
