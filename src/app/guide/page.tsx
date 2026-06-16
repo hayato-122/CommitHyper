@@ -105,7 +105,6 @@ update
         onClose();
       }, 1500);
     } catch {
-      // fallback for older browsers
       const textarea = document.createElement("textarea");
       textarea.value = promptContent;
       document.body.appendChild(textarea);
@@ -122,21 +121,21 @@ update
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="mx-4 w-full max-w-[640px] rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="mx-4 w-full max-w-[640px] rounded-2xl border border-mist bg-white p-6 shadow-subtle" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-midnight-ink">プロンプトをコピー</h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600">
+          <h3 className="text-body-sm font-semibold text-midnight-ink">プロンプトをコピー</h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-zinc-500 hover:bg-pearl hover:text-midnight-ink">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <pre className="mb-5 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl bg-zinc-50 p-4 text-xs leading-relaxed text-zinc-700">
+        <pre className="mb-5 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl bg-pearl p-4 text-caption leading-relaxed text-zinc-600">
           {promptContent}
         </pre>
         <button
           onClick={handleCopy}
-          className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+          className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-body-sm font-semibold transition-all ${
             copied
-              ? "bg-emerald-500 text-white"
+              ? "bg-leaf-soft text-white"
               : "bg-brand-teal text-white hover:brightness-110"
           }`}
         >
@@ -148,7 +147,7 @@ update
           ) : (
             <>
               <Clipboard className="h-4 w-4" />
-              <span>クリップボードにコピー</span>
+              クリップボードにコピー
             </>
           )}
         </button>
@@ -162,18 +161,19 @@ export default function GuidePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-pearl">
-      <header className="flex h-14 items-center border-b border-mist bg-white px-6">
-        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80">
+      <header className="flex h-14 shrink-0 items-center border-b border-mist bg-white px-6">
+        <Link href="/dashboard" className="flex items-center gap-2 transition-opacity hover:opacity-80">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-teal">
             <GitCommitHorizontal className="h-4 w-4 text-white" />
           </div>
-          <span className="text-sm font-medium text-midnight-ink">CommitHyper</span>
+          <span className="text-body-sm font-semibold text-midnight-ink">CommitHyper</span>
         </Link>
-        <div className="mx-4 h-4 w-px bg-zinc-200" />
-        <span className="text-sm text-zinc-500">ガイド</span>
+        <div className="mx-4 h-4 w-px bg-mist" />
+        <span className="text-body-sm text-zinc-500">ガイド</span>
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
+        {/* Hero */}
         <ScrollReveal>
           <h1 className="text-[2rem] font-semibold leading-none tracking-tight text-midnight-ink">
             良いコミットメッセージとは
@@ -188,29 +188,19 @@ export default function GuidePage() {
         {/* Recommended Format */}
         <section className="mt-16">
           <ScrollReveal>
-            <h2 className="text-heading-sm font-semibold text-midnight-ink">
-              推奨フォーマット
-            </h2>
-            <p className="mt-2 text-body text-zinc-500">
-              Conventional Commits の形式をベースにしています。
-            </p>
+            <h2 className="text-heading-sm font-semibold text-midnight-ink">推奨フォーマット</h2>
+            <p className="mt-2 text-body text-zinc-500">Conventional Commits の形式をベースにしています。</p>
             <div className="mt-6 rounded-3xl border border-mist bg-white p-6">
-              <code className="text-lg font-medium text-midnight-ink">
-                type(scope): summary
-              </code>
-              <div className="mt-4 space-y-2 text-body-sm text-zinc-600">
-                <p><span className="font-medium text-brand-teal">type</span> — 変更の種類（feat / fix / refactor 等）</p>
-                <p><span className="font-medium text-zinc-500">(scope)</span> — 変更箇所（省略可。auth / ui / db 等）</p>
-                <p><span className="font-medium text-zinc-500">summary</span> — 変更内容の要約</p>
+              <code className="text-subheading font-semibold text-midnight-ink">type(scope): summary</code>
+              <div className="mt-4 space-y-2 text-body-sm leading-relaxed text-zinc-600">
+                <p><span className="font-semibold text-brand-teal">type</span> — 変更の種類（feat / fix / refactor 等）</p>
+                <p><span className="font-semibold text-zinc-500">(scope)</span> — 変更箇所（省略可。auth / ui / db 等）</p>
+                <p><span className="font-semibold text-zinc-500">summary</span> — 変更内容の要約</p>
               </div>
               <div className="mt-4 rounded-xl bg-pearl p-4">
-                <p className="text-sm font-medium text-zinc-500">良い例</p>
-                <code className="mt-1 block text-sm text-midnight-ink">
-                  feat(auth): GitHubログインボタンを追加する
-                </code>
-                <code className="mt-1 block text-sm text-midnight-ink">
-                  fix(ui): ボタンのホバー色を修正する
-                </code>
+                <p className="text-caption font-medium text-zinc-500">良い例</p>
+                <code className="mt-1 block text-body-sm text-midnight-ink">feat(auth): GitHubログインボタンを追加する</code>
+                <code className="mt-1 block text-body-sm text-midnight-ink">fix(ui): ボタンのホバー色を修正する</code>
               </div>
             </div>
           </ScrollReveal>
@@ -219,33 +209,29 @@ export default function GuidePage() {
         {/* Body */}
         <section className="mt-16">
           <ScrollReveal>
-            <h2 className="text-heading-sm font-semibold text-midnight-ink">
-              本文（Body）で変更内容を補足する
-            </h2>
+            <h2 className="text-heading-sm font-semibold text-midnight-ink">本文（Body）で変更内容を補足する</h2>
             <p className="mt-2 text-body text-zinc-500">
-              サマリー（1行目）だけで伝えきれないときは、
-              空行の後に本文を追加し、変更内容を箇条書き（<code className="rounded bg-zinc-100 px-1 text-caption">-</code>）で書くと
-              より読みやすくなります。
+              サマリー（1行目）だけで伝えきれないときは、空行の後に本文を追加し、変更内容を箇条書き（<code className="rounded bg-pearl px-1 text-caption">-</code>）で書くとより読みやすくなります。
             </p>
             <div className="mt-6 rounded-3xl border border-mist bg-white p-6">
               <div className="rounded-xl bg-pearl p-4">
-                <p className="text-sm font-medium text-zinc-500">完全なコミットメッセージの例</p>
+                <p className="text-caption font-medium text-zinc-500">完全なコミットメッセージの例</p>
                 <div className="mt-2 space-y-1">
-                  <code className="block text-sm text-brand-teal">feat(auth): GitHubログインボタンを追加する</code>
-                  <code className="block text-sm text-zinc-400">{" "}</code>
-                  <code className="block text-sm text-midnight-ink">- トップページにGitHub OAuth認証の入り口を追加</code>
-                  <code className="block text-sm text-midnight-ink">- Auth.js v5でコールバック処理を実装</code>
-                  <code className="block text-sm text-midnight-ink">- ログイン後はダッシュボードにリダイレクトする</code>
+                  <code className="block text-body-sm text-brand-teal">feat(auth): GitHubログインボタンを追加する</code>
+                  <code className="block text-body-sm text-zinc-400">{" "}</code>
+                  <code className="block text-body-sm text-midnight-ink">- トップページにGitHub OAuth認証の入り口を追加</code>
+                  <code className="block text-body-sm text-midnight-ink">- Auth.js v5でコールバック処理を実装</code>
+                  <code className="block text-body-sm text-midnight-ink">- ログイン後はダッシュボードにリダイレクトする</code>
                 </div>
               </div>
-              <div className="mt-4 space-y-3 text-body-sm text-zinc-600">
+              <div className="mt-4 space-y-3 text-body-sm leading-relaxed text-zinc-600">
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 shrink-0 rounded-full bg-brand-teal/10 px-2 py-0.5 text-caption font-medium text-brand-teal">S</span>
-                  <span><span className="font-medium">サマリー（Summary）</span> — 1行目。type(scope): 要約の形式で、何をしたか一言で</span>
+                  <span className="mt-0.5 shrink-0 rounded-full bg-brand-teal/10 px-2 py-0.5 text-caption font-semibold text-brand-teal">S</span>
+                  <span><span className="font-semibold">サマリー</span> — 1行目。type(scope): 要約の形式で、何をしたか一言で</span>
                 </div>
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-caption font-medium text-zinc-500">B</span>
-                  <span><span className="font-medium">本文（Body）</span> — 空行の後。<code className="rounded bg-zinc-100 px-1 text-caption">-</code> で箇条書きすると、変更内容を整理して伝えられる</span>
+                  <span className="mt-0.5 shrink-0 rounded-full bg-pearl px-2 py-0.5 text-caption font-semibold text-zinc-500">B</span>
+                  <span><span className="font-semibold">本文</span> — 空行の後に箇条書き（<code className="rounded bg-pearl px-1 text-caption">-</code>）で変更内容を整理</span>
                 </div>
               </div>
             </div>
@@ -255,16 +241,12 @@ export default function GuidePage() {
         {/* Type List */}
         <section className="mt-16">
           <ScrollReveal>
-            <h2 className="text-heading-sm font-semibold text-midnight-ink">
-              Type 一覧
-            </h2>
-            <p className="mt-2 text-body text-zinc-500">
-              type は変更の種類を表します。この中から適切なものを選んでください。
-            </p>
+            <h2 className="text-heading-sm font-semibold text-midnight-ink">Type 一覧</h2>
+            <p className="mt-2 text-body text-zinc-500">type は変更の種類を表します。この中から適切なものを選んでください。</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {VALID_TYPES.map((t) => (
                 <div key={t.type} className="rounded-2xl border border-mist bg-white p-4">
-                  <code className="text-sm font-semibold text-brand-teal">{t.type}</code>
+                  <code className="text-body-sm font-bold text-brand-teal">{t.type}</code>
                   <p className="mt-1 text-body-sm text-zinc-500">{t.desc}</p>
                 </div>
               ))}
@@ -275,23 +257,17 @@ export default function GuidePage() {
         {/* Evaluation Criteria */}
         <section className="mt-16">
           <ScrollReveal>
-            <h2 className="text-heading-sm font-semibold text-midnight-ink">
-              CommitHyper の評価観点
-            </h2>
-            <p className="mt-2 text-body text-zinc-500">
-              コミットメッセージは以下の6項目、合計100点で評価されます。
-            </p>
+            <h2 className="text-heading-sm font-semibold text-midnight-ink">CommitHyper の評価観点</h2>
+            <p className="mt-2 text-body text-zinc-500">コミットメッセージは以下の6項目、合計100点で評価されます。</p>
             <div className="mt-6 space-y-4">
               {CRITERIA.map((c) => (
                 <div key={c.name} className="rounded-2xl border border-mist bg-white p-5">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h3 className="font-medium text-midnight-ink">{c.name}</h3>
-                      <p className="mt-1 text-body-sm text-zinc-500">{c.desc}</p>
+                      <h3 className="font-semibold text-midnight-ink">{c.name}</h3>
+                      <p className="mt-1 text-body-sm leading-relaxed text-zinc-500">{c.desc}</p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-brand-teal/10 px-3 py-1 text-caption font-medium text-brand-teal">
-                      {c.points}点
-                    </span>
+                    <span className="shrink-0 rounded-full bg-brand-teal/10 px-3 py-1 text-caption font-bold text-brand-teal">{c.points}点</span>
                   </div>
                 </div>
               ))}
@@ -302,87 +278,49 @@ export default function GuidePage() {
         {/* Examples */}
         <section className="mt-16">
           <ScrollReveal>
-            <h2 className="text-heading-sm font-semibold text-midnight-ink">
-              良い例 / 悪い例
-            </h2>
-            <p className="mt-2 text-body text-zinc-500">
-              具体的なコミットメッセージを見てみましょう。
-              type(scope): summary の形式に従うと、格段に読みやすくなります。
-            </p>
+            <h2 className="text-heading-sm font-semibold text-midnight-ink">良い例 / 悪い例</h2>
+            <p className="mt-2 text-body text-zinc-500">具体的なコミットメッセージを見てみましょう。type(scope): summary の形式に従うと、格段に読みやすくなります。</p>
             <div className="mt-6 grid gap-6 sm:grid-cols-2">
-              <div className="rounded-2xl border border-emerald-200 bg-white p-6">
-                <p className="mb-3 text-sm font-semibold text-emerald-600">良い例 — どれも「何を変えたか」が明確</p>
+              <div className="rounded-2xl border border-leaf-soft/30 bg-white p-6">
+                <p className="mb-3 text-body-sm font-bold text-leaf-soft">良い例</p>
                 <div className="space-y-4">
-                  <div>
-                    <code className="block rounded-xl bg-emerald-50 px-4 py-2.5 text-body-sm text-emerald-700">
-                      feat(auth): GitHubログインボタンを追加する
-                    </code>
-                    <p className="mt-1 text-caption text-zinc-500">
-                      語尾に「〜する」をつけた日本語として自然な形
-                    </p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-emerald-50 px-4 py-2.5 text-body-sm text-emerald-700">
-                      fix(api): GitHubの空レスポンスを処理する
-                    </code>
-                    <p className="mt-1 text-caption text-zinc-500">
-                      こちらも「〜する」形式。一貫性があれば問題なし
-                    </p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-emerald-50 px-4 py-2.5 text-body-sm text-emerald-700">
-                      refactor(db): クエリのN+1問題を解消する
-                    </code>
-                    <p className="mt-1 text-caption text-zinc-500">
-                      scope に db を指定。何を直したか一目でわかる
-                    </p>
-                  </div>
+                  {[
+                    { msg: "feat(auth): GitHubログインボタンを追加する", note: "語尾に「〜する」をつけた日本語として自然な形" },
+                    { msg: "fix(api): GitHubの空レスポンスを処理する", note: "こちらも「〜する」形式。一貫性があれば問題なし" },
+                    { msg: "refactor(db): クエリのN+1問題を解消する", note: "scope に db を指定。何を直したか一目でわかる" },
+                  ].map((item, i) => (
+                    <div key={i}>
+                      <code className="block rounded-xl bg-green-50 px-4 py-2.5 text-body-sm text-green-700">{item.msg}</code>
+                      <p className="mt-1 text-caption text-zinc-500">{item.note}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
               <div className="rounded-2xl border border-red-200 bg-white p-6">
-                <p className="mb-3 text-sm font-semibold text-red-500">悪い例 — 何を変えたか不明確</p>
+                <p className="mb-3 text-body-sm font-bold text-red-500">悪い例</p>
                 <div className="space-y-4">
-                  <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">
-                      fix bug
-                    </code>
-                    <p className="mt-1 text-caption text-zinc-500">
-                      どのバグを何のために直したか不明。typeもなし
-                    </p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">
-                      バグを修正
-                    </code>
-                    <p className="mt-1 text-caption text-zinc-500">
-                      日本語のみ。何をどう修正したかわからない
-                    </p>
-                  </div>
-                  <div>
-                    <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">
-                      update
-                    </code>
-                    <p className="mt-1 text-caption text-zinc-500">
-                      最もよくない例。何も伝わらない
-                    </p>
-                  </div>
+                  {[
+                    { msg: "fix bug", note: "どのバグを何のために直したか不明。typeもなし" },
+                    { msg: "バグを修正", note: "日本語のみ。何をどう修正したかわからない" },
+                    { msg: "update", note: "最もよくない例。何も伝わらない" },
+                  ].map((item, i) => (
+                    <div key={i}>
+                      <code className="block rounded-xl bg-red-50 px-4 py-2.5 text-body-sm text-red-600">{item.msg}</code>
+                      <p className="mt-1 text-caption text-zinc-500">{item.note}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </ScrollReveal>
         </section>
 
-        {/* AI Tools Section at Bottom */}
+        {/* AI Tools Section */}
         <section className="mt-16">
           <ScrollReveal>
-            <h2 className="text-heading-sm font-semibold text-midnight-ink">
-              AI・コーディングエージェントに渡す
-            </h2>
-            <p className="mt-2 text-body text-zinc-500">
-              ChatGPT/Claude に直接貼り付けるプロンプトと、コーディングエージェントにインポートするルールファイルを用意しています。
-            </p>
+            <h2 className="text-heading-sm font-semibold text-midnight-ink">AI・コーディングエージェントに渡す</h2>
+            <p className="mt-2 text-body text-zinc-500">ChatGPT/Claude に直接貼り付けるプロンプトと、コーディングエージェントにインポートするルールファイルを用意しています。</p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {/* Copy Prompt Card */}
               <button
                 onClick={() => setShowModal(true)}
                 className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-zinc-300 bg-white p-5 text-left text-body-sm transition-all hover:border-zinc-400 hover:bg-zinc-50"
@@ -391,36 +329,30 @@ export default function GuidePage() {
                   <Clipboard className="h-5 w-5 text-zinc-500" />
                 </div>
                 <div>
-                  <p className="font-medium text-zinc-600">プロンプトをコピー</p>
+                  <p className="font-semibold text-zinc-600">プロンプトをコピー</p>
                   <p className="text-caption text-zinc-400">ChatGPT/Claudeに渡す</p>
                 </div>
               </button>
-
-              {/* Download Rules Card */}
               <a
                 href="/prompts/commithyper.md"
                 download
-                className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-zinc-300 bg-white p-5 text-body-sm transition-all hover:border-zinc-400 hover:bg-zinc-50"
+                className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-zinc-300 bg-white p-5 text-left text-body-sm transition-all hover:border-zinc-400 hover:bg-zinc-50"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100">
                   <Download className="h-5 w-5 text-zinc-500" />
                 </div>
                 <div>
-                  <p className="font-medium text-zinc-600">ルールをダウンロード</p>
+                  <p className="font-semibold text-zinc-600">ルールをダウンロード</p>
                   <p className="text-caption text-zinc-400">コーディングエージェント用</p>
                 </div>
               </a>
             </div>
-            <div className="mt-5 rounded-xl bg-zinc-50 p-4">
-              <p className="text-xs font-medium text-zinc-500">💡 使い方</p>
-              <p className="mt-2 text-xs leading-relaxed text-zinc-600">
-                このファイルをプロジェクトのルールディレクトリ（
-                <code className="rounded bg-zinc-200 px-1 text-[11px]">.cursor/rules/</code>
-                、
-                <code className="rounded bg-zinc-200 px-1 text-[11px]">.github/copilot-instructions.md</code>
-                など）に配置し、他のルールファイルから以下のように参照してください。
+            <div className="mt-5 rounded-xl bg-white border border-mist p-4">
+              <p className="text-caption font-semibold text-zinc-500">💡 使い方</p>
+              <p className="mt-2 text-caption leading-relaxed text-zinc-600">
+                ダウンロードしたファイルをプロジェクトのルールディレクトリ（<code className="rounded bg-pearl px-1 text-caption">.cursor/rules/</code>、<code className="rounded bg-pearl px-1 text-caption">.github/copilot-instructions.md</code> など）に配置し、他のルールファイルから以下のように参照してください。
               </p>
-              <pre className="mt-2 rounded-lg bg-white p-3 text-xs leading-relaxed text-zinc-600">
+              <pre className="mt-2 rounded-lg bg-pearl p-3 text-caption leading-relaxed text-zinc-600">
 {`# プロジェクトルール例
 コミットメッセージを作成・評価する際は、
 必ず commithyper.md のルールに従ってください。

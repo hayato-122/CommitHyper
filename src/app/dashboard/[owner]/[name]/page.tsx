@@ -20,13 +20,6 @@ type Commit = {
   exampleMessage?: string | null;
 };
 
-type CandidatesResponse = {
-  commits: Commit[];
-  page: number;
-  totalPages: number;
-  totalCount: number;
-};
-
 type Progress = {
   level: number;
   title: string;
@@ -105,9 +98,7 @@ export default function DashboardPage() {
   function onTabChange(newTab: "candidates" | "all") {
     setTab(newTab);
     setPage(1);
-    if (newTab === "all") {
-      loadAllCommits();
-    }
+    if (newTab === "all") loadAllCommits();
   }
 
   function sortCommits(list: Commit[]) {
@@ -159,14 +150,15 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-zinc-500">読み込み中...</p>
+      <div className="flex min-h-screen items-center justify-center bg-pearl">
+        <p className="text-body text-zinc-500">読み込み中...</p>
       </div>
     );
   }
 
   return (
     <div className="flex min-h-screen flex-col">
+      {/* ===== Top Bar ===== */}
       <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6">
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80">
@@ -199,170 +191,260 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           {progress && (
-            <button onClick={() => signOut()} className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-800">
-              {progress.avatarUrl && <img src={progress.avatarUrl} alt="" className="h-6 w-6 rounded-full" />}
-              {progress.name ?? "User"}
+            <button onClick={() => signOut()} className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
+              {progress.avatarUrl && (
+                <img src={progress.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
+              )}
+              {progress.name}
             </button>
           )}
         </div>
       </header>
 
+      {/* ===== Body ===== */}
       <div className="flex flex-1">
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex gap-1 rounded-lg bg-zinc-100 p-1 w-fit">
-              <button onClick={() => onTabChange("candidates")}
-                className={`rounded-md px-4 py-2 text-sm font-medium transition-all ${tab === "candidates" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}>
+        {/* Main Area */}
+        <main className="flex-1 px-8 py-10">
+          {/* Repository Header */}
+          <ScrollReveal>
+            <div className="mb-8">
+              <h1 className="text-heading-sm font-semibold leading-tight tracking-tight text-midnight-ink">
+                {owner}/{name}
+              </h1>
+              <p className="mt-2 text-body text-zinc-500">
+                コミットメッセージを分析・改善して、コミット力を高めましょう。
+              </p>
+            </div>
+          </ScrollReveal>
+
+          {/* Tabs + Controls */}
+            <div className="mb-8 flex items-center justify-between">
+            <div className="flex overflow-hidden rounded-lg border border-zinc-300">
+              <button
+                onClick={() => onTabChange("candidates")}
+                className={`px-4 py-2 text-xs font-medium transition-all ${
+                  tab === "candidates"
+                    ? "bg-brand-teal text-white"
+                    : "bg-white text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
                 改善候補
               </button>
-              <button onClick={() => onTabChange("all")}
-                className={`rounded-md px-4 py-2 text-sm font-medium transition-all ${tab === "all" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}>
+              <button
+                onClick={() => onTabChange("all")}
+                className={`px-4 py-2 text-xs font-medium transition-all ${
+                  tab === "all"
+                    ? "bg-brand-teal text-white"
+                    : "bg-white text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
                 すべてのコミット
               </button>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex overflow-hidden rounded-lg border border-zinc-300">
-                <button onClick={() => setSortBy("score")}
-                  className={`px-3 py-1.5 text-xs font-medium transition-all ${sortBy === "score" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"}`}>
-                  スコア
+            <div className="flex items-center gap-3">
+              {/* Sort */}
+              <div className="flex items-center gap-2">
+                <div className="flex overflow-hidden rounded-lg border border-zinc-300">
+                  <button
+                    onClick={() => { setSortBy("score"); setPage(1); }}
+                    className={`px-3 py-1.5 text-xs font-medium transition-all ${
+                      sortBy === "score" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"
+                    }`}
+                  >
+                    スコア
+                  </button>
+                  <button
+                    onClick={() => { setSortBy("date"); setPage(1); }}
+                    className={`px-3 py-1.5 text-xs font-medium transition-all ${
+                      sortBy === "date" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"
+                    }`}
+                  >
+                    日付
+                  </button>
+                </div>
+                <button
+                  onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-all hover:bg-zinc-50"
+                >
+                  <ArrowUpDown className="mr-1 inline h-3 w-3" />
+                  {sortOrder === "asc" ? "昇順" : "降順"}
                 </button>
-                <button onClick={() => setSortBy("date")}
-                  className={`px-3 py-1.5 text-xs font-medium transition-all ${sortBy === "date" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"}`}>
-                  日付
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  <RotateCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                  再分析
                 </button>
               </div>
-              <button onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600 transition-all hover:bg-zinc-50">
-                <ArrowUpDown className="mr-1 inline h-3 w-3" />
-                {sortOrder === "asc" ? "昇順" : "降順"}
-              </button>
-              <button onClick={handleRefresh} disabled={refreshing}
-                className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-50">
-                <RotateCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                再分析
-              </button>
             </div>
           </div>
 
+          {/* Candidate Cards */}
           {tab === "candidates" && (
             <div className="space-y-4">
               {candidateCommits.length === 0 ? (
-                <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
-                  <p className="text-lg font-medium text-zinc-700">改善候補はありません</p>
-                  <p className="mt-2 text-sm text-zinc-500">すべてのコミットメッセージが高評価です！</p>
+                <div className="rounded-2xl border border-mist bg-white p-10 text-center">
+                  <p className="text-body text-zinc-500">改善が必要なコミットはありません。</p>
+                  <p className="mt-1 text-body-sm text-zinc-400">すべてのコミットが高評価です。</p>
                 </div>
               ) : (
-                <>
-                  <div className="grid gap-4">
-                    {candidateCommits.map((commit) => (
-                      <ScrollReveal key={commit.id}>
-                        <div className="rounded-xl border border-zinc-200 bg-white p-5">
-                          <div className="mb-3">
-                            <div className="mb-2 flex items-center gap-3 text-xs text-zinc-400">
-                              <span className="font-mono">{commit.sha.slice(0, 7)}</span>
-                              <span>{commit.authorName}</span>
-                              <span>{new Date(commit.committedAt).toLocaleDateString("ja-JP")}</span>
-                            </div>
-                            <div className="flex items-start justify-between">
-                              <p className="font-mono text-sm text-zinc-800">{commit.message}</p>
-                              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${commit.currentScore >= 50 ? "bg-red-50 text-red-600" : "bg-red-100 text-red-700"}`}>
-                                {commit.currentScore}点
-                              </span>
-                            </div>
-                          </div>
+                candidateCommits.map((commit) => (
+                  <ScrollReveal key={commit.id}>
+                    <div className="rounded-2xl border border-mist bg-white p-5">
+                      <div className="flex gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-caption text-zinc-400">{commit.sha.slice(0, 7)}</p>
+                          <p className="mt-1 text-body-sm leading-relaxed text-midnight-ink">{commit.message}</p>
+                          <p className="mt-2 text-caption text-zinc-500">
+                            {commit.authorName} · {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
+                          </p>
                           {commit.firstIssue && (
-                            <p className="mb-3 text-xs text-zinc-500">💡 {commit.firstIssue}</p>
+                            <p className="mt-2 text-caption text-red-600">
+                              {commit.firstIssue}
+                            </p>
                           )}
-                          <div className="flex gap-2 border-t border-zinc-100 pt-3">
-                            <button onClick={() => router.push(`/dashboard/${owner}/${name}/improve/${commit.id}`)}
-                              className="flex-1 rounded-lg bg-brand-teal px-4 py-2 text-sm font-medium text-white transition-all hover:brightness-110">
-                              改善する
-                            </button>
-                          </div>
                         </div>
-                      </ScrollReveal>
-                    ))}
-                  </div>
-                  {totalPages > 1 && (
-                    <div className="mt-6 flex items-center justify-center gap-4">
-                      <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
-                        className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-30">←</button>
-                      <span className="text-sm font-medium text-zinc-600">
-                        {String(page).padStart(2, "0")} / {String(totalPages).padStart(2, "0")}
-                      </span>
-                      <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
-                        className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-30">→</button>
+                        <div className="flex flex-col items-end justify-between gap-2">
+                          <span className={`rounded-full px-3 py-1 text-caption font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                            {commit.currentScore}<span className="font-normal opacity-70">/100</span>
+                          </span>
+                          <button
+                            onClick={() => router.push(`/dashboard/${owner}/${name}/improve/${commit.id}`)}
+                            className="rounded-lg bg-brand-teal px-4 py-1.5 text-caption font-medium text-white transition-all hover:brightness-110"
+                          >
+                            改善する
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </>
+                  </ScrollReveal>
+                ))
+              )}
+
+              {/* Pager */}
+              {totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-center gap-4">
+                  <button
+                    onClick={() => setPage(page - 1)}
+                    disabled={page <= 1}
+                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-30"
+                  >
+                    ←
+                  </button>
+                  <span className="text-sm font-medium text-zinc-600">
+                    {String(page).padStart(2, "0")} / {String(totalPages).padStart(2, "0")}
+                  </span>
+                  <button
+                    onClick={() => setPage(page + 1)}
+                    disabled={page >= totalPages}
+                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 transition-all hover:bg-zinc-50 disabled:opacity-30"
+                  >
+                    →
+                  </button>
+                </div>
               )}
             </div>
           )}
 
+          {/* All Commits */}
           {tab === "all" && (
-            <div className="space-y-3">
-              {sortCommits(allCommits).map((commit) => (
-                <ScrollReveal key={commit.id}>
-                  <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                    <div className="flex gap-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-mono text-xs text-zinc-400">{commit.sha.slice(0, 7)}</p>
-                        <p className="mt-1 line-clamp-2 text-sm text-zinc-800">{commit.message}</p>
-                        <p className="mt-2 text-xs text-zinc-500">
-                          {commit.authorName} · {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
-                        </p>
-                        {"firstIssue" in commit && commit.firstIssue && (
-                          <p className="mt-2 text-xs text-red-500 line-clamp-1">
-                            ⚠ {(commit as { firstIssue: string }).firstIssue}
+            <div className="space-y-4">
+              {allCommits.length === 0 ? (
+                <div className="rounded-2xl border border-mist bg-white p-10 text-center">
+                  <p className="text-body text-zinc-500">コミットがまだありません。</p>
+                  <p className="mt-1 text-body-sm text-zinc-400">「再分析」ボタンでコミットを取得してください。</p>
+                </div>
+              ) : (
+                sortCommits(allCommits).map((commit) => (
+                  <ScrollReveal key={commit.id}>
+                    <div className="rounded-2xl border border-mist bg-white p-5">
+                      <div className="flex gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-caption text-zinc-400">{commit.sha.slice(0, 7)}</p>
+                          <p className="mt-1 text-body-sm leading-relaxed text-midnight-ink">{commit.message}</p>
+                          <p className="mt-2 text-caption text-zinc-500">
+                            {commit.authorName} · {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
                           </p>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end justify-between">
-                        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${commit.currentScore < 70 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"}`}>
-                          {commit.currentScore}
-                        </span>
-                        <button onClick={() => router.push(`/dashboard/${owner}/${name}/improve/${commit.id}`)}
-                          className="rounded-lg bg-brand-teal px-2.5 py-1 text-xs font-medium text-white transition-all hover:brightness-110">
-                          改善する
-                        </button>
+                        </div>
+                        <div className="flex flex-col items-end justify-between gap-2">
+                          <span className={`rounded-full px-3 py-1 text-caption font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                            {commit.currentScore}<span className="font-normal opacity-70">/100</span>
+                          </span>
+                          <button
+                            onClick={() => router.push(`/dashboard/${owner}/${name}/improve/${commit.id}`)}
+                            className="rounded-lg bg-brand-teal px-4 py-1.5 text-caption font-medium text-white transition-all hover:brightness-110"
+                          >
+                            改善する
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </ScrollReveal>
-              ))}
+                  </ScrollReveal>
+                ))
+              )}
             </div>
           )}
         </main>
 
-        <aside className="w-72 shrink-0 border-l border-zinc-200 bg-zinc-50 p-5">
+        {/* Right Panel */}
+        <aside className="w-72 shrink-0 border-l border-mist bg-white/50 p-5">
+          {/* Growth Card */}
           {progress && (
-            <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-5">
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">成長</h3>
-              <p className="text-2xl font-bold text-zinc-800">Lv.{progress.level}</p>
-              <p className="text-sm font-medium text-zinc-600">{progress.title}</p>
-              <p className="mt-3 text-xs text-zinc-500">XP {progress.xp} / {progress.xp + progress.xpToNext}</p>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100">
+            <div className="mb-5 rounded-2xl border border-mist bg-white p-5">
+              <h3 className="mb-3 text-caption font-medium uppercase tracking-wider text-zinc-500">成長</h3>
+              <p className="text-heading-sm font-bold text-midnight-ink">Lv.{progress.level}</p>
+              <p className="text-body-sm font-medium text-midnight-ink">{progress.title}</p>
+              <p className="mt-3 text-caption text-zinc-500">
+                XP {progress.xp} / {progress.xp + progress.xpToNext}
+              </p>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-pearl">
                 <div className="h-full rounded-full bg-brand-teal transition-all" style={{ width: `${progress.progress}%` }} />
               </div>
-              {progress.xpToNext > 0 && <p className="mt-1 text-[10px] text-zinc-400">あと{progress.xpToNext}XPでLv.{progress.nextLevel}</p>}
+              {progress.xpToNext > 0 && (
+                <p className="mt-1 text-caption text-fog-gray">
+                  あと {progress.xpToNext} XP で Lv.{progress.nextLevel}
+                </p>
+              )}
             </div>
           )}
-          <div className="rounded-xl border border-zinc-200 bg-white p-5">
-            <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">リポジトリ品質</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">現在スコア</span><span className="font-medium text-zinc-800">{currentAvg} / 100</span></div>
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">初期スコア</span><span className="font-medium text-zinc-800">{initialAvg} / 100</span></div>
-              <div className="flex justify-between text-sm">
+
+          {/* Repo Quality Card */}
+          <div className="rounded-2xl border border-mist bg-white p-5">
+            <h3 className="mb-3 text-caption font-medium uppercase tracking-wider text-zinc-500">リポジトリ品質</h3>
+            <div className="space-y-2.5">
+              <div className="flex justify-between text-body-sm">
+                <span className="text-zinc-500">現在スコア</span>
+                <span className="font-semibold text-midnight-ink">{currentAvg}<span className="font-normal text-zinc-400">/100</span></span>
+              </div>
+              <div className="flex justify-between text-body-sm">
+                <span className="text-zinc-500">初期スコア</span>
+                <span className="font-semibold text-midnight-ink">{initialAvg}<span className="font-normal text-zinc-400">/100</span></span>
+              </div>
+              <div className="flex justify-between text-body-sm">
                 <span className="text-zinc-500">改善</span>
-                <span className={`font-medium ${currentAvg - initialAvg >= 0 ? "text-emerald-600" : "text-zinc-500"}`}>
+                <span className={`font-semibold ${currentAvg - initialAvg >= 0 ? "text-emerald-600" : "text-zinc-500"}`}>
                   {currentAvg - initialAvg >= 0 ? "+" : ""}{currentAvg - initialAvg}
                 </span>
               </div>
-              <hr className="my-2 border-zinc-100" />
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">全コミット</span><span className="font-medium text-zinc-800">{totalCommits}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">改善必要</span><span className="font-medium text-red-600">{totalCount}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">改善済み</span><span className="font-medium text-emerald-600">{improvedCount}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">優秀</span><span className="font-medium text-zinc-800">{excellentCount}</span></div>
+              <hr className="my-2 border-mist" />
+              <div className="flex justify-between text-body-sm">
+                <span className="text-zinc-500">全コミット</span>
+                <span className="font-semibold text-midnight-ink">{totalCommits}</span>
+              </div>
+              <div className="flex justify-between text-body-sm">
+                <span className="text-zinc-500">改善必要</span>
+                <span className="font-semibold text-red-600">{totalCount}</span>
+              </div>
+              <div className="flex justify-between text-body-sm">
+                <span className="text-zinc-500">改善済み</span>
+                <span className="font-semibold text-emerald-600">{improvedCount}</span>
+              </div>
+              <div className="flex justify-between text-body-sm">
+                <span className="text-zinc-500">優秀</span>
+                <span className="font-semibold text-midnight-ink">{excellentCount}</span>
+              </div>
             </div>
           </div>
         </aside>
