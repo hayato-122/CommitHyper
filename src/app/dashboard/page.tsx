@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { ScrollReveal } from "@/components/ScrollReveal";
-import { GitCommitHorizontal } from "lucide-react";
+
 
 type Repo = {
   id: number;
@@ -64,7 +64,7 @@ export default function DashboardPage() {
       <header className="flex h-14 items-center justify-between border-b border-mist bg-white px-6">
         <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-teal">
-            <GitCommitHorizontal className="h-4 w-4 text-white" />
+            <img src="/icon1.png" alt="" className="h-4 w-4" />
           </div>
           <span className="text-sm font-medium text-midnight-ink">CommitHyper</span>
         </Link>

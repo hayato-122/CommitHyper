@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { GitCommitHorizontal } from "lucide-react";
+
 
 export default function LoginPage() {
   return (
@@ -9,7 +9,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 shadow-subtle">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-teal">
-            <GitCommitHorizontal className="h-8 w-8 text-white" />
+            <img src="/icon1.png" alt="CommitHyper" className="h-8 w-8" />
           </div>
           <h1
             className="text-[2rem] font-semibold leading-none tracking-tight text-midnight-ink"

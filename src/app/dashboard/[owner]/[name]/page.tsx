@@ -5,7 +5,12 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { ScrollReveal } from "@/components/ScrollReveal";
-import { GitCommitHorizontal, ArrowLeft, RotateCw } from "lucide-react";
+import {
+  GitCommitHorizontal,
+  ArrowLeft,
+  RotateCw,
+  ArrowUpDown,
+} from "lucide-react";
 
 type Commit = {
   id: string;
@@ -57,12 +62,12 @@ export default function DashboardPage() {
   const loadCandidates = useCallback(
     async (currentPage: number) => {
       const res = await fetch(
-        `/api/repos/${owner}/${name}/candidates?page=${currentPage}`
+        `/api/repos/${owner}/${name}/candidates?page=${currentPage}`,
       );
       const data = await res.json();
       setCandidates(data);
     },
-    [owner, name]
+    [owner, name],
   );
 
   const loadAllCommits = useCallback(
@@ -74,10 +79,11 @@ export default function DashboardPage() {
       const qs = params.toString();
       const url = `/api/repos/${owner}/${name}/commits${qs ? `?${qs}` : ""}`;
       const res = await fetch(url);
+      if (!res.ok) return;
       const data = await res.json();
       setAllCommits(Array.isArray(data) ? data : []);
     },
-    [owner, name, selectedBranch]
+    [owner, name, selectedBranch],
   );
 
   const loadBranches = useCallback(async () => {
@@ -103,11 +109,18 @@ export default function DashboardPage() {
     let cancelled = false;
     async function init() {
       setLoading(true);
-      await Promise.all([loadCandidates(1), loadAllCommits(), loadBranches(), loadProgress()]);
+      await Promise.all([
+        loadCandidates(1),
+        loadAllCommits(),
+        loadBranches(),
+        loadProgress(),
+      ]);
       if (!cancelled) setLoading(false);
     }
     init();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -131,29 +144,40 @@ export default function DashboardPage() {
     setSelectedBranch(branch);
     setPage(1);
     setLoading(true);
-    await Promise.all([
-      loadAllCommits(true, branch),
-      loadCandidates(1),
-    ]);
+    await Promise.all([loadAllCommits(true, branch), loadCandidates(1)]);
     setLoading(false);
   }
 
   async function handleRefresh() {
     setRefreshing(true);
     setPage(1);
-    await Promise.all([loadAllCommits(true), loadCandidates(1), loadProgress()]);
+    await Promise.all([
+      loadAllCommits(true),
+      loadCandidates(1),
+      loadProgress(),
+    ]);
     setRefreshing(false);
   }
 
   const totalCommits = allCommits.length;
-  const initialAvg = totalCommits > 0
-    ? Math.round(allCommits.reduce((s, c) => s + c.initialScore, 0) / totalCommits)
-    : 0;
-  const currentAvg = totalCommits > 0
-    ? Math.round(allCommits.reduce((s, c) => s + c.currentScore, 0) / totalCommits)
-    : 0;
-  const improvedCount = allCommits.filter((c) => c.status === "improved").length;
-  const excellentCount = allCommits.filter((c) => c.status === "excellent").length;
+  const initialAvg =
+    totalCommits > 0
+      ? Math.round(
+          allCommits.reduce((s, c) => s + c.initialScore, 0) / totalCommits,
+        )
+      : 0;
+  const currentAvg =
+    totalCommits > 0
+      ? Math.round(
+          allCommits.reduce((s, c) => s + c.currentScore, 0) / totalCommits,
+        )
+      : 0;
+  const improvedCount = allCommits.filter(
+    (c) => c.status === "improved",
+  ).length;
+  const excellentCount = allCommits.filter(
+    (c) => c.status === "excellent",
+  ).length;
 
   if (loading) {
     return (
@@ -168,11 +192,16 @@ export default function DashboardPage() {
       {/* ========== Top Bar ========== */}
       <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 hover:opacity-80"
+          >
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-teal">
-              <GitCommitHorizontal className="h-4 w-4 text-white" />
+              <img src="/icon1.png" alt="" className="h-4 w-4" />
             </div>
-            <span className="text-sm font-medium text-zinc-800">CommitHyper</span>
+            <span className="text-sm font-medium text-zinc-800">
+              CommitHyper
+            </span>
           </Link>
           <div className="h-4 w-px bg-zinc-200" />
           <Link
@@ -195,7 +224,9 @@ export default function DashboardPage() {
                 className="max-w-[140px] truncate rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
               >
                 {branches.map((b) => (
-                  <option key={b} value={b}>{b}</option>
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
                 ))}
               </select>
             </>
@@ -210,7 +241,10 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           {progress && (
-            <button onClick={() => signOut()} className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-800">
+            <button
+              onClick={() => signOut()}
+              className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-800"
+            >
               {progress.avatarUrl && (
                 <img
                   src={progress.avatarUrl}
@@ -289,7 +323,9 @@ export default function DashboardPage() {
                               </span>
                               <span>{commit.authorName}</span>
                               <span>
-                                {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
+                                {new Date(
+                                  commit.committedAt,
+                                ).toLocaleDateString("ja-JP")}
                               </span>
                             </div>
                             <div className="flex items-start justify-between">
@@ -311,7 +347,7 @@ export default function DashboardPage() {
                             <button
                               onClick={() =>
                                 router.push(
-                                  `/dashboard/${owner}/${name}/improve/${commit.id}`
+                                  `/dashboard/${owner}/${name}/improve/${commit.id}`,
                                 )
                               }
                               className="flex-1 rounded-lg bg-brand-teal px-4 py-2 text-sm font-medium text-white transition-all hover:brightness-110"
@@ -367,7 +403,9 @@ export default function DashboardPage() {
                         </p>
                         <p className="mt-2 text-xs text-zinc-500">
                           {commit.authorName} ·{" "}
-                          {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
+                          {new Date(commit.committedAt).toLocaleDateString(
+                            "ja-JP",
+                          )}
                         </p>
                       </div>
                       <span
@@ -424,11 +462,15 @@ export default function DashboardPage() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">現在スコア</span>
-                <span className="font-medium text-zinc-800">{currentAvg} / 100</span>
+                <span className="font-medium text-zinc-800">
+                  {currentAvg} / 100
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">初期スコア</span>
-                <span className="font-medium text-zinc-800">{initialAvg} / 100</span>
+                <span className="font-medium text-zinc-800">
+                  {initialAvg} / 100
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">改善</span>
@@ -446,7 +488,9 @@ export default function DashboardPage() {
               <hr className="my-2 border-zinc-100" />
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">全コミット</span>
-                <span className="font-medium text-zinc-800">{totalCommits}</span>
+                <span className="font-medium text-zinc-800">
+                  {totalCommits}
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">改善必要</span>
