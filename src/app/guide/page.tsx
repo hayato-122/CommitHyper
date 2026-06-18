@@ -169,9 +169,10 @@ export default function GuidePage() {
           <span className="text-body-sm font-semibold text-midnight-ink">CommitHyper</span>
         </Link>
         <div className="mx-4 h-4 w-px bg-mist" />
+        <button onClick={() => window.history.back()} className="text-body-sm text-zinc-500 hover:text-midnight-ink">戻る</button>
+        <div className="mx-4 h-4 w-px bg-mist" />
         <span className="text-body-sm text-zinc-500">ガイド</span>
       </header>
-
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
         {/* Hero */}
         <ScrollReveal>
