@@ -187,11 +187,11 @@ export default function DashboardPage() {
       <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6">
         <div className="flex items-center gap-4">
           <Link
-            href="/dashboard"
+            href="/"
             className="flex items-center gap-2 hover:opacity-80"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-teal">
-              <img src="/icon1.png" alt="" className="h-4 w-4" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-teal">
+              <img src="/icon1.png" alt="" className="h-full w-full object-contain" />
             </div>
             <span className="text-sm font-medium text-zinc-800">
               CommitHyper
@@ -539,3 +539,13 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
