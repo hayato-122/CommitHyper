@@ -24,6 +24,14 @@ export const metadata: Metadata = {
   title: "CommitHyper — コミットメッセージ改善で開発力を上げよう",
   description:
     "GitHubのコミットメッセージを分析し、改善タスクとして学べるWebアプリです。",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
+  manifest: "/manifest.json",
+  other: {
+    "apple-mobile-web-app-title": "CommitHyper",
+  },
 };
 
 export default function RootLayout({
