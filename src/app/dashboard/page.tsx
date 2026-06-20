@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { ScrollReveal } from "@/components/ScrollReveal";
-
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { LogOut } from "lucide-react";
 
 type Repo = {
   id: number;
@@ -76,13 +77,23 @@ export default function DashboardPage() {
             ガイド
           </Link>
           {user && (
-          <button onClick={() => signOut()} className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
-            {user.avatarUrl && (
-              <img src={user.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
-            )}
-            {user.name}
-          </button>
-        )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
+                  {user.avatarUrl && (
+                    <img src={user.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
+                  )}
+                  {user.name}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })} className="cursor-pointer gap-2">
+                  <LogOut className="h-4 w-4" />
+                  ログアウト
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </header>
 

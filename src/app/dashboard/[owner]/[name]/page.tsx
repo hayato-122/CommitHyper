@@ -6,11 +6,12 @@ import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import {
-  GitCommitHorizontal,
   ArrowLeft,
   RotateCw,
   ArrowUpDown,
+  LogOut,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 type Commit = {
   id: string;
@@ -234,19 +235,26 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           {progress && (
-            <button
-              onClick={() => signOut()}
-              className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink"
-            >
-              {progress.avatarUrl && (
-                <img
-                  src={progress.avatarUrl}
-                  alt=""
-                  className="h-6 w-6 rounded-full"
-                />
-              )}
-              {progress.name}
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
+                  {progress.avatarUrl && (
+                    <img
+                      src={progress.avatarUrl}
+                      alt=""
+                      className="h-6 w-6 rounded-full"
+                    />
+                  )}
+                  {progress.name}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })} className="cursor-pointer gap-2">
+                  <LogOut className="h-4 w-4" />
+                  ログアウト
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </header>
