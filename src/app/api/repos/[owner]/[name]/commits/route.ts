@@ -24,23 +24,38 @@ export async function GET(
     return Response.json({ error: "Repository not found" }, { status: 404 });
   }
 
-  // ブランチ固有のキャッシュキー（DBにはbranchカラムがないのでリフレッシュ時にブランチ名を付加）
-  const branchCacheKey = `branch:${branch}`;
-
-  // キャッシュチェック: 同じブランチのコミットが既にある場合はスキップ（refresh時は無視）
   if (!refresh && repository.analyzedAt) {
-    // 今回は簡易的に: 同じブランチが既に分析済みならキャッシュを返す
     const existingCommits = await prisma.commit.findMany({
       where: { repositoryId: repository.id },
       orderBy: { committedAt: "desc" },
       take: 100,
+      include: { evaluations: { orderBy: { evaluatedAt: "desc" }, take: 1 } },
     });
     if (existingCommits.length > 0) {
-      return Response.json(existingCommits);
+      return Response.json(
+        existingCommits.map((c) => ({
+          id: c.id,
+          sha: c.sha,
+          message: c.message,
+          authorName: c.authorName,
+          authorEmail: c.authorEmail,
+          committedAt: c.committedAt,
+          url: c.url,
+          initialScore: c.initialScore,
+          currentScore: c.currentScore,
+          status: c.status,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          repositoryId: c.repositoryId,
+          firstIssue: c.evaluations?.[0]?.issues
+            ? (JSON.parse(c.evaluations[0].issues) as string[])[0] ?? null
+            : null,
+          exampleMessage: c.evaluations?.[0]?.exampleMessage ?? null,
+        }))
+      );
     }
   }
 
-  // refresh時は既存データを削除
   if (refresh) {
     await prisma.commitEvaluation.deleteMany({
       where: { commit: { repositoryId: repository.id } },
@@ -50,7 +65,6 @@ export async function GET(
     });
   }
 
-  // GitHub APIからコミットを取得（ブランチ指定）
   const apiUrl = branch && branch !== "default"
     ? `https://api.github.com/repos/${owner}/${name}/commits?sha=${encodeURIComponent(branch)}&per_page=100`
     : `https://api.github.com/repos/${owner}/${name}/commits?per_page=100`;
@@ -100,7 +114,11 @@ export async function GET(
       },
     });
 
-    commits.push(commit);
+    commits.push({
+      ...commit,
+      firstIssue: evalResult.issues[0] ?? null,
+      exampleMessage: evalResult.exampleMessage,
+    });
   }
 
   await prisma.repository.update({

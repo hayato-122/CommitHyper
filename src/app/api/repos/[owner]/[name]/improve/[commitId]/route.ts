@@ -2,6 +2,35 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateCommit } from "@/lib/evaluateCommit";
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { commitId } = await params;
+
+  const evaluation = await prisma.commitEvaluation.findFirst({
+    where: { commitId },
+    orderBy: { evaluatedAt: "desc" },
+  });
+
+  if (!evaluation) {
+    return Response.json({ error: "Evaluation not found" }, { status: 404 });
+  }
+
+  return Response.json({
+    score: evaluation.score,
+    rank: evaluation.rank,
+    issues: JSON.parse(evaluation.issues),
+    suggestions: JSON.parse(evaluation.suggestions),
+    exampleMessage: evaluation.exampleMessage,
+  });
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
@@ -19,7 +48,6 @@ export async function POST(
     return Response.json({ error: "Message is required" }, { status: 400 });
   }
 
-  // コミットを取得
   const commit = await prisma.commit.findUnique({
     where: { id: commitId },
   });
@@ -27,10 +55,8 @@ export async function POST(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
-  // 改善後メッセージを評価
   const evalResult = evaluateCommit(improvedMessage);
 
-  // ImprovementAttemptを保存
   const attempt = await prisma.improvementAttempt.create({
     data: {
       commitId: commit.id,
@@ -44,7 +70,6 @@ export async function POST(
     },
   });
 
-  // スコアが上がったらcurrentScoreを更新
   let xpGained = 0;
   if (evalResult.score > commit.currentScore) {
     await prisma.commit.update({
@@ -53,17 +78,14 @@ export async function POST(
     });
   }
 
-  // 70点以上なら合格
   if (evalResult.score >= 70) {
     await prisma.commit.update({
       where: { id: commit.id },
       data: { status: "improved" },
     });
 
-    // XP計算
     xpGained = evalResult.score >= 90 ? 15 : 10;
 
-    // XPイベントを保存
     await prisma.xpEvent.create({
       data: {
         userId: session.user.id,
@@ -74,20 +96,17 @@ export async function POST(
       },
     });
 
-    // ユーザーのXPを更新
     await prisma.user.update({
       where: { id: session.user.id },
       data: { xp: { increment: xpGained } },
     });
 
-    // 改善履歴のXPを更新
     await prisma.improvementAttempt.update({
       where: { id: attempt.id },
       data: { xpGained },
     });
   }
 
-  // 50-69点でも少量XP
   if (evalResult.score >= 50 && evalResult.score < 70) {
     xpGained = 3;
     await prisma.xpEvent.create({
