@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { signOut, useSession } from "next-auth/react";
 import { ScrollReveal } from "@/components/ScrollReveal";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { LogOut } from "lucide-react";
+import { Header } from "@/components/Header";
+import { RepoCard } from "@/components/RepoCard";
 
 type Repo = {
   id: number;
@@ -62,40 +60,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-pearl">
-      <header className="flex h-14 items-center justify-between border-b border-mist bg-white px-6">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-teal">
-            <img src="/icon1.png" alt="" className="h-full w-full object-contain" />
-          </div>
-          <span className="text-sm font-medium text-midnight-ink">CommitHyper</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/guide"
-            className="text-xs text-zinc-400 hover:text-zinc-600"
-          >
-            ガイド
-          </Link>
-          {user && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
-                  {user.avatarUrl && (
-                    <img src={user.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
-                  )}
-                  {user.name}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })} className="cursor-pointer gap-2">
-                  <LogOut className="h-4 w-4" />
-                  ログアウト
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </header>
+      <Header user={user} />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-16">
         <ScrollReveal>
@@ -111,60 +76,10 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {repos.map((repo) => (
-            <ScrollReveal key={repo.id} delay={0.05}>
-              <button
-                onClick={() => handleSelect(repo)}
-                className="group w-full rounded-3xl border border-mist bg-white p-6 text-left transition-all hover:border-brand-teal/30 hover:shadow-subtle"
-              >
-                {/* Repo name + icon */}
-                <div className="mb-4 flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="truncate text-subheading font-semibold leading-tight text-midnight-ink">
-                      {repo.name}
-                    </h3>
-                    <p className="mt-1 text-body-sm text-zinc-500">
-                      {repo.owner.login}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-xl px-2.5 py-1 text-caption font-medium ${
-                      repo.private
-                        ? "bg-cream-paper text-amber-700"
-                        : "bg-mint-wash text-brand-teal"
-                    }`}
-                  >
-                    {repo.private ? "Private" : "Public"}
-                  </span>
-                </div>
-
-                {/* Description */}
-                {repo.description ? (
-                  <p className="line-clamp-2 text-body-sm leading-relaxed text-zinc-500">
-                    {repo.description}
-                  </p>
-                ) : (
-                  <p className="text-body-sm leading-relaxed text-fog-gray italic">
-                    説明なし
-                  </p>
-                )}
-
-                {/* Select hint */}
-                <div className="mt-5 flex items-center gap-2 text-body-sm font-medium text-brand-teal opacity-0 transition-opacity group-hover:opacity-100">
-                  選択する
-                  <span aria-hidden="true">→</span>
-                </div>
-              </button>
-            </ScrollReveal>
+            <RepoCard key={repo.id} repo={repo} onSelect={handleSelect} />
           ))}
         </div>
       </main>
     </div>
   );
 }
-
-
-
-
-
-
-

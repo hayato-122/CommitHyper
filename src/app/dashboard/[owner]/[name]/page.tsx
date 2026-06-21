@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -12,6 +12,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Header } from "@/components/Header";
+import { SortControls } from "@/components/SortControls";
 
 type Commit = {
   id: string;
@@ -22,8 +24,13 @@ type Commit = {
   initialScore: number;
   currentScore: number;
   status: string;
-  firstIssue?: string | null;
-  exampleMessage?: string | null;
+};
+
+type CandidatesResponse = {
+  commits: Commit[];
+  page: number;
+  totalPages: number;
+  totalCount: number;
 };
 
 type Progress = {
@@ -46,6 +53,7 @@ export default function DashboardPage() {
   const name = params.name as string;
 
   const [tab, setTab] = useState<"candidates" | "all">("candidates");
+  const [candidates, setCandidates] = useState<CandidatesResponse | null>(null);
   const [allCommits, setAllCommits] = useState<Commit[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -53,14 +61,25 @@ export default function DashboardPage() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [selectedBranch, setSelectedBranch] = useState("default");
-  const [sortBy, setSortBy] = useState<"score" | "date">("score");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortBy, setSortBy] = useState<{ field: "date" | "score"; direction: "asc" | "desc" }>({ field: "date", direction: "desc" });
+
+  const loadCandidates = useCallback(
+    async (currentPage: number) => {
+      const res = await fetch(
+        `/api/repos/${owner}/${name}/candidates?page=${currentPage}`,
+      );
+      const data = await res.json();
+      setCandidates(data);
+    },
+    [owner, name],
+  );
 
   const loadAllCommits = useCallback(
     async (forceRefresh = false, branch?: string) => {
+      const b = branch ?? selectedBranch;
       const params = new URLSearchParams();
       if (forceRefresh) params.set("refresh", "true");
-      if (branch && branch !== "default") params.set("branch", branch);
+      if (b && b !== "default") params.set("branch", b);
       const qs = params.toString();
       const url = `/api/repos/${owner}/${name}/commits${qs ? `?${qs}` : ""}`;
       const res = await fetch(url);
@@ -68,7 +87,7 @@ export default function DashboardPage() {
       const data = await res.json();
       setAllCommits(Array.isArray(data) ? data : []);
     },
-    [owner, name],
+    [owner, name, selectedBranch],
   );
 
   const loadBranches = useCallback(async () => {
@@ -94,7 +113,12 @@ export default function DashboardPage() {
     let cancelled = false;
     async function init() {
       setLoading(true);
-      await Promise.all([loadAllCommits(), loadBranches(), loadProgress()]);
+      await Promise.all([
+        loadCandidates(1),
+        loadAllCommits(),
+        loadBranches(),
+        loadProgress(),
+      ]);
       if (!cancelled) setLoading(false);
     }
     init();
@@ -106,54 +130,39 @@ export default function DashboardPage() {
 
   function onTabChange(newTab: "candidates" | "all") {
     setTab(newTab);
-    setPage(1);
-    if (newTab === "all") loadAllCommits();
+    if (newTab === "candidates") {
+      setPage(1);
+      loadCandidates(1);
+    } else {
+      loadAllCommits();
+    }
   }
 
-  function sortCommits(list: Commit[]) {
-    return [...list].sort((a, b) => {
-      let cmp: number;
-      if (sortBy === "score") {
-        cmp = a.currentScore - b.currentScore;
-      } else {
-        cmp =
-          new Date(a.committedAt).getTime() - new Date(b.committedAt).getTime();
-      }
-      return sortOrder === "asc" ? cmp : -cmp;
-    });
-  }
-
-  function getCandidatePage() {
-    const filtered = allCommits.filter(
-      (c) => c.status === "pending" && c.currentScore < 70,
-    );
-    const sorted = sortCommits(filtered);
-    const perPage = 3;
-    const totalPages = Math.ceil(sorted.length / perPage);
-    const commits = sorted.slice((page - 1) * perPage, page * perPage);
-    return { commits, totalPages, totalCount: sorted.length };
+  function onPageChange(newPage: number) {
+    if (newPage < 1 || (candidates && newPage > candidates.totalPages)) return;
+    setPage(newPage);
+    loadCandidates(newPage);
   }
 
   async function handleBranchChange(branch: string) {
     setSelectedBranch(branch);
     setPage(1);
     setLoading(true);
-    await loadAllCommits(true, branch);
+    await Promise.all([loadAllCommits(true, branch), loadCandidates(1)]);
     setLoading(false);
   }
 
   async function handleRefresh() {
     setRefreshing(true);
     setPage(1);
-    await Promise.all([loadAllCommits(true), loadProgress()]);
+    await Promise.all([
+      loadAllCommits(true),
+      loadCandidates(1),
+      loadProgress(),
+    ]);
     setRefreshing(false);
   }
 
-  const {
-    commits: candidateCommits,
-    totalPages,
-    totalCount,
-  } = getCandidatePage();
   const totalCommits = allCommits.length;
   const initialAvg =
     totalCommits > 0
@@ -174,6 +183,34 @@ export default function DashboardPage() {
     (c) => c.status === "excellent",
   ).length;
 
+  // 並び替え（スコア / 日付 × 昇順 / 降順）
+  const sortedCandidates = useMemo(() => {
+    if (!candidates?.commits) return candidates;
+    const sorted = [...candidates.commits].sort((a, b) => {
+      let cmp: number;
+      if (sortBy.field === "score") {
+        cmp = a.currentScore - b.currentScore;
+      } else {
+        cmp = new Date(a.committedAt).getTime() - new Date(b.committedAt).getTime();
+      }
+      return sortBy.direction === "asc" ? cmp : -cmp;
+    });
+    return { ...candidates, commits: sorted };
+  }, [candidates, sortBy]);
+
+  const sortedCommits = useMemo(() => {
+    return [...allCommits].sort((a, b) => {
+      if (sortBy.field === "score") {
+        return sortBy.direction === "asc"
+          ? a.currentScore - b.currentScore
+          : b.currentScore - a.currentScore;
+      }
+      return sortBy.direction === "asc"
+        ? new Date(a.committedAt).getTime() - new Date(b.committedAt).getTime()
+        : new Date(b.committedAt).getTime() - new Date(a.committedAt).getTime();
+    });
+  }, [allCommits, sortBy]);
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -182,82 +219,53 @@ export default function DashboardPage() {
     );
   }
 
+  // ヘッダーの left スロット（パンくず + ブランチ選択）
+  const headerLeft = (
+    <>
+      <div className="h-4 w-px bg-zinc-200" />
+      <Link
+        href="/dashboard"
+        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600"
+      >
+        <ArrowLeft className="h-3 w-3" />
+        リポジトリ一覧
+      </Link>
+      <div className="h-4 w-px bg-zinc-200" />
+      <span className="text-sm font-medium text-zinc-600">
+        {owner}/{name}
+      </span>
+      {branches.length > 0 && (
+        <>
+          <div className="h-4 w-px bg-zinc-200" />
+          <select
+            value={selectedBranch}
+            onChange={(e) => handleBranchChange(e.target.value)}
+            className="max-w-[140px] truncate rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+          >
+            {branches.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+      <div className="h-4 w-px bg-zinc-200" />
+      <Link
+        href="/guide"
+        className="text-xs text-zinc-400 hover:text-zinc-600"
+      >
+        ガイド
+      </Link>
+    </>
+  );
+
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 hover:opacity-80"
-          >
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-teal">
-              <img src="/icon1.png" alt="" className="h-full w-full object-contain" />
-            </div>
-            <span className="text-sm font-medium text-zinc-800">
-              CommitHyper
-            </span>
-          </Link>
-          <div className="h-4 w-px bg-zinc-200" />
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            リポジトリ一覧
-          </Link>
-          <div className="h-4 w-px bg-zinc-200" />
-          <span className="text-sm font-medium text-zinc-600">
-            {owner}/{name}
-          </span>
-          {branches.length > 0 && (
-            <>
-              <div className="h-4 w-px bg-zinc-200" />
-              <select
-                value={selectedBranch}
-                onChange={(e) => handleBranchChange(e.target.value)}
-                className="max-w-[140px] truncate rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
-              >
-                {branches.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-          <div className="h-4 w-px bg-zinc-200" />
-          <Link
-            href="/guide"
-            className="text-xs text-zinc-400 hover:text-zinc-600"
-          >
-            ガイド
-          </Link>
-        </div>
-        <div className="flex items-center gap-3">
-          {progress && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
-                  {progress.avatarUrl && (
-                    <img
-                      src={progress.avatarUrl}
-                      alt=""
-                      className="h-6 w-6 rounded-full"
-                    />
-                  )}
-                  {progress.name}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })} className="cursor-pointer gap-2">
-                  <LogOut className="h-4 w-4" />
-                  ログアウト
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </header>
+      <Header
+        left={headerLeft}
+        user={progress ? { name: progress.name, avatarUrl: progress.avatarUrl } : null}
+      />
 
       <div className="flex flex-1">
         <main className="flex-1 px-8 py-10">
@@ -286,35 +294,7 @@ export default function DashboardPage() {
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex overflow-hidden rounded-lg border border-zinc-300">
-                <button
-                  onClick={() => {
-                    setSortBy("score");
-                    setPage(1);
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium transition-all ${sortBy === "score" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"}`}
-                >
-                  スコア
-                </button>
-                <button
-                  onClick={() => {
-                    setSortBy("date");
-                    setPage(1);
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium transition-all ${sortBy === "date" ? "bg-brand-teal text-white" : "bg-white text-zinc-600 hover:bg-zinc-50"}`}
-                >
-                  日付
-                </button>
-              </div>
-              <button
-                onClick={() =>
-                  setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-                }
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50"
-              >
-                <ArrowUpDown className="mr-1 inline h-3 w-3" />
-                {sortOrder === "asc" ? "昇順" : "降順"}
-              </button>
+              <SortControls sortBy={sortBy} onSortChange={setSortBy} />
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -328,125 +308,113 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Candidates tab */}
           {tab === "candidates" && (
             <div className="space-y-4">
-              {candidateCommits.length === 0 ? (
+              {sortedCandidates?.commits?.length === 0 ? (
                 <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
                   <p className="text-lg font-medium text-zinc-700">
                     改善候補はありません
                   </p>
                   <p className="mt-2 text-sm text-zinc-500">
-                    すべてのコミットメッセージが高評価です。
+                    すべてのコミットメッセージが高評価です！
                   </p>
                 </div>
               ) : (
-                candidateCommits.map((commit) => (
-                  <ScrollReveal key={commit.id}>
-                    <div className="rounded-xl border border-zinc-200 bg-white p-5">
-                      <div className="flex gap-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-mono text-xs text-zinc-400">
-                            {commit.sha.slice(0, 7)}
-                          </p>
-                          <p className="mt-1 text-sm leading-relaxed text-zinc-800">
-                            {commit.message}
-                          </p>
-                          <p className="mt-2 text-xs text-zinc-500">
-                            {commit.authorName} ·{" "}
-                            {new Date(commit.committedAt).toLocaleDateString(
-                              "ja-JP",
-                            )}
-                          </p>
-                          {commit.firstIssue && (
-                            <p className="mt-2 text-xs text-red-600">
-                              {commit.firstIssue}
-                            </p>
-                          )}
+                <>
+                  <div className="grid gap-4">
+                    {sortedCandidates?.commits?.map((commit) => (
+                      <ScrollReveal key={commit.id}>
+                        <div className="rounded-xl border border-zinc-200 bg-white p-5">
+                          <div className="mb-3">
+                            <div className="mb-2 flex items-center gap-3 text-xs text-zinc-400">
+                              <span className="font-mono">
+                                {commit.sha.slice(0, 7)}
+                              </span>
+                              <span>{commit.authorName}</span>
+                              <span>
+                                {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
+                              </span>
+                            </div>
+                            <div className="flex items-start justify-between">
+                              <p className="font-mono text-sm text-zinc-800">
+                                {commit.message}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-zinc-100 pt-3">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
+                            >
+                              {commit.currentScore}/100
+                            </span>
+                            <button
+                              onClick={() =>
+                                router.push(
+                                  `/dashboard/${owner}/${name}/improve/${commit.id}`,
+                                )
+                              }
+                              className="rounded-lg bg-brand-teal px-4 py-1.5 text-xs font-medium text-white hover:brightness-110"
+                            >
+                              改善する
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex flex-col items-end justify-between gap-2">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
-                          >
-                            {commit.currentScore}/100
-                          </span>
-                          <button
-                            onClick={() =>
-                              router.push(
-                                `/dashboard/${owner}/${name}/improve/${commit.id}`,
-                              )
-                            }
-                            className="rounded-lg bg-brand-teal px-4 py-1.5 text-xs font-medium text-white hover:brightness-110"
-                          >
-                            改善する
-                          </button>
-                        </div>
-                      </div>
+                      </ScrollReveal>
+                    ))}
+                  </div>
+
+                  {candidates && candidates.totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-center gap-4">
+                      <button
+                        onClick={() => onPageChange(page - 1)}
+                        disabled={page <= 1}
+                        className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-30"
+                      >
+                        ←
+                      </button>
+                      <span className="text-sm font-medium text-zinc-600">
+                        {String(page).padStart(2, "0")} /{" "}
+                        {String(candidates?.totalPages ?? 1).padStart(2, "0")}
+                      </span>
+                      <button
+                        onClick={() => onPageChange(page + 1)}
+                        disabled={page >= (candidates?.totalPages ?? 1)}
+                        className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-30"
+                      >
+                        →
+                      </button>
                     </div>
-                  </ScrollReveal>
-                ))
-              )}
-              {totalPages > 1 && (
-                <div className="mt-6 flex items-center justify-center gap-4">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={page <= 1}
-                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-30"
-                  >
-                    ←
-                  </button>
-                  <span className="text-sm font-medium text-zinc-600">
-                    {String(page).padStart(2, "0")} /{" "}
-                    {String(totalPages).padStart(2, "0")}
-                  </span>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={page >= totalPages}
-                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-30"
-                  >
-                    →
-                  </button>
-                </div>
+                  )}
+                </>
               )}
             </div>
           )}
 
+          {/* All commits tab */}
           {tab === "all" && (
             <div className="space-y-3">
-              {sortCommits(allCommits).map((commit) => (
+              {sortedCommits.map((commit) => (
                 <ScrollReveal key={commit.id}>
                   <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                    <div className="flex gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-xs text-zinc-400">
                           {commit.sha.slice(0, 7)}
                         </p>
-                        <p className="mt-1 text-sm leading-relaxed text-zinc-800">
+                        <p className="mt-1 line-clamp-2 text-sm text-zinc-800">
                           {commit.message}
                         </p>
                         <p className="mt-2 text-xs text-zinc-500">
                           {commit.authorName} ·{" "}
-                          {new Date(commit.committedAt).toLocaleDateString(
-                            "ja-JP",
-                          )}
+                          {new Date(commit.committedAt).toLocaleDateString("ja-JP")}
                         </p>
                       </div>
-                      <div className="flex flex-col items-end justify-between gap-2">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
-                        >
-                          {commit.currentScore}/100
-                        </span>
-                        <button
-                          onClick={() =>
-                            router.push(
-                              `/dashboard/${owner}/${name}/improve/${commit.id}`,
-                            )
-                          }
-                          className="rounded-lg bg-brand-teal px-4 py-1.5 text-xs font-medium text-white hover:brightness-110"
-                        >
-                          改善する
-                        </button>
-                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
+                      >
+                        {commit.currentScore}
+                      </span>
                     </div>
                   </div>
                 </ScrollReveal>
@@ -483,6 +451,7 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+
           <div className="rounded-xl border border-zinc-200 bg-white p-5">
             <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
               リポジトリ品質
@@ -490,21 +459,15 @@ export default function DashboardPage() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">現在スコア</span>
-                <span className="font-medium text-zinc-800">
-                  {currentAvg} / 100
-                </span>
+                <span className="font-medium text-zinc-800">{currentAvg} / 100</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">初期スコア</span>
-                <span className="font-medium text-zinc-800">
-                  {initialAvg} / 100
-                </span>
+                <span className="font-medium text-zinc-800">{initialAvg} / 100</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">改善</span>
-                <span
-                  className={`font-medium ${currentAvg - initialAvg >= 0 ? "text-emerald-600" : "text-zinc-500"}`}
-                >
+                <span className={`font-medium ${currentAvg - initialAvg >= 0 ? "text-emerald-600" : "text-zinc-500"}`}>
                   {currentAvg - initialAvg >= 0 ? "+" : ""}
                   {currentAvg - initialAvg}
                 </span>
@@ -512,25 +475,19 @@ export default function DashboardPage() {
               <hr className="my-2 border-zinc-100" />
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">全コミット</span>
-                <span className="font-medium text-zinc-800">
-                  {totalCommits}
-                </span>
+                <span className="font-medium text-zinc-800">{totalCommits}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">改善必要</span>
-                <span className="font-medium text-red-600">{totalCount}</span>
+                <span className="font-medium text-red-600">{candidates?.totalCount ?? 0}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">改善済み</span>
-                <span className="font-medium text-emerald-600">
-                  {improvedCount}
-                </span>
+                <span className="font-medium text-emerald-600">{improvedCount}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">優秀</span>
-                <span className="font-medium text-zinc-800">
-                  {excellentCount}
-                </span>
+                <span className="font-medium text-zinc-800">{excellentCount}</span>
               </div>
             </div>
           </div>
@@ -539,13 +496,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-

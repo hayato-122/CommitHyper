@@ -2,22 +2,13 @@
 
 import Link from "next/link";
 import { signIn } from "next-auth/react";
+import { Header } from "@/components/Header";
+import { LandingFooter } from "@/components/LandingFooter";
 
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-pearl">
-      {/* Top Bar */}
-      <header className="flex h-14 items-center justify-between border-b border-mist bg-white px-6">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-teal">
-            <img src="/icon1.png" alt="" className="h-full w-full object-contain" />
-          </div>
-          <span className="text-sm font-medium text-midnight-ink">CommitHyper</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link href="/guide" className="text-xs text-zinc-400 hover:text-zinc-600">ガイド</Link>
-        </div>
-      </header>
+      <Header simple />
 
       <main className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 shadow-subtle">
@@ -72,11 +63,7 @@ export default function LoginPage() {
         </div>
       </main>
 
-      <footer className="border-t border-mist bg-white px-6 py-8 text-center">
-        <p className="text-caption text-fog-gray">
-          Built for developers who care about commit quality.
-        </p>
-      </footer>
+      <LandingFooter />
     </div>
   );
 }
