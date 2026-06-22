@@ -77,12 +77,63 @@ export async function POST(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
-  // ルールベース評価（ゲームスコアの基準として使う）
+  // ★ 評価のみ実行（DBへの書き込みは行わない）
+  // 点数・XPの反映は PUT で行う
   const evalResult = evaluateCommit(improvedMessage);
-
-  // AI評価（参考情報として取得）
   const aiResult = await aiEvaluateCommit(improvedMessage);
 
+  return Response.json({
+    score: evalResult.score,
+    rank: evalResult.rank,
+    issues: evalResult.issues,
+    suggestions: evalResult.suggestions,
+    exampleMessage: evalResult.exampleMessage,
+    passed: evalResult.score >= 70,
+    // XPはまだ付与されていないことを明示
+    xpGained: 0,
+    pendingApply: true,
+    // AI評価（参考情報）
+    ai: aiResult
+      ? {
+          score: aiResult.score,
+          rank: aiResult.rank,
+          issues: aiResult.issues,
+          suggestions: aiResult.suggestions,
+          exampleMessage: aiResult.exampleMessage,
+        }
+      : null,
+  });
+}
+
+// PUT: 改善メッセージをDBに反映し、XPを付与する（「GitHubに反映」ボタン用）
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { commitId } = await params;
+  const body = await request.json();
+  const improvedMessage = body.message as string;
+
+  if (!improvedMessage || improvedMessage.trim().length === 0) {
+    return Response.json({ error: "Message is required" }, { status: 400 });
+  }
+
+  const commit = await prisma.commit.findUnique({
+    where: { id: commitId },
+  });
+  if (!commit) {
+    return Response.json({ error: "Commit not found" }, { status: 404 });
+  }
+
+  // 最終評価を実行
+  const evalResult = evaluateCommit(improvedMessage);
+
+  // ImprovementAttempt を保存
   const attempt = await prisma.improvementAttempt.create({
     data: {
       commitId: commit.id,
@@ -96,7 +147,7 @@ export async function POST(
     },
   });
 
-  let xpGained = 0;
+  // currentScore 更新（改善していれば）
   if (evalResult.score > commit.currentScore) {
     await prisma.commit.update({
       where: { id: commit.id },
@@ -104,6 +155,9 @@ export async function POST(
     });
   }
 
+  let xpGained = 0;
+
+  // 合格（70点以上）→ XP付与 + status更新
   if (evalResult.score >= 70) {
     await prisma.commit.update({
       where: { id: commit.id },
@@ -126,13 +180,9 @@ export async function POST(
       where: { id: session.user.id },
       data: { xp: { increment: xpGained } },
     });
-
-    await prisma.improvementAttempt.update({
-      where: { id: attempt.id },
-      data: { xpGained },
-    });
   }
 
+  // 不合格だが50点以上 → 努力XPを微量付与
   if (evalResult.score >= 50 && evalResult.score < 70) {
     xpGained = 3;
     await prisma.xpEvent.create({
@@ -148,30 +198,26 @@ export async function POST(
       where: { id: session.user.id },
       data: { xp: { increment: xpGained } },
     });
-    await prisma.improvementAttempt.update({
-      where: { id: attempt.id },
-      data: { xpGained },
-    });
   }
 
+  // ImprovementAttempt の XP を更新
+  await prisma.improvementAttempt.update({
+    where: { id: attempt.id },
+    data: { xpGained },
+  });
+
+  // 更新後のユーザー情報を取得
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { xp: true, level: true, title: true },
+  });
+
   return Response.json({
-    // ルールベース評価（XP基準）
     score: evalResult.score,
     rank: evalResult.rank,
-    issues: evalResult.issues,
-    suggestions: evalResult.suggestions,
-    exampleMessage: evalResult.exampleMessage,
     passed: evalResult.score >= 70,
     xpGained,
-    // AI評価（参考情報）
-    ai: aiResult
-      ? {
-          score: aiResult.score,
-          rank: aiResult.rank,
-          issues: aiResult.issues,
-          suggestions: aiResult.suggestions,
-          exampleMessage: aiResult.exampleMessage,
-        }
-      : null,
+    user,
+    applied: true,
   });
 }
