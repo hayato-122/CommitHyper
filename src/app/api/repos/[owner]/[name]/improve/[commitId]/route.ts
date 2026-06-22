@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateCommit } from "@/lib/evaluateCommit";
+import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
 export async function GET(
   _request: Request,
@@ -13,6 +14,7 @@ export async function GET(
 
   const { commitId } = await params;
 
+  // ルールベース評価をDBから取得（commit取得時に行われたもの）
   const evaluation = await prisma.commitEvaluation.findFirst({
     where: { commitId },
     orderBy: { evaluatedAt: "desc" },
@@ -22,12 +24,32 @@ export async function GET(
     return Response.json({ error: "Evaluation not found" }, { status: 404 });
   }
 
+  // コミットメッセージを取得（AI評価に使う）
+  const commit = await prisma.commit.findUnique({
+    where: { id: commitId },
+  });
+
+  // AI評価（Gemini Flash）をオンデマンド生成
+  // GEMINI_API_KEY が設定されていない場合は null になる
+  const aiResult = commit ? await aiEvaluateCommit(commit.message) : null;
+
   return Response.json({
+    // ルールベース評価（従来の評価）
     score: evaluation.score,
     rank: evaluation.rank,
-    issues: JSON.parse(evaluation.issues),
-    suggestions: JSON.parse(evaluation.suggestions),
+    issues: JSON.parse(evaluation.issues as string) as string[],
+    suggestions: JSON.parse(evaluation.suggestions as string) as string[],
     exampleMessage: evaluation.exampleMessage,
+    // AI評価（Gemini Flash、オプショナル）
+    ai: aiResult
+      ? {
+          score: aiResult.score,
+          rank: aiResult.rank,
+          issues: aiResult.issues,
+          suggestions: aiResult.suggestions,
+          exampleMessage: aiResult.exampleMessage,
+        }
+      : null,
   });
 }
 
@@ -55,7 +77,11 @@ export async function POST(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
+  // ルールベース評価（ゲームスコアの基準として使う）
   const evalResult = evaluateCommit(improvedMessage);
+
+  // AI評価（参考情報として取得）
+  const aiResult = await aiEvaluateCommit(improvedMessage);
 
   const attempt = await prisma.improvementAttempt.create({
     data: {
@@ -129,6 +155,7 @@ export async function POST(
   }
 
   return Response.json({
+    // ルールベース評価（XP基準）
     score: evalResult.score,
     rank: evalResult.rank,
     issues: evalResult.issues,
@@ -136,5 +163,15 @@ export async function POST(
     exampleMessage: evalResult.exampleMessage,
     passed: evalResult.score >= 70,
     xpGained,
+    // AI評価（参考情報）
+    ai: aiResult
+      ? {
+          score: aiResult.score,
+          rank: aiResult.rank,
+          issues: aiResult.issues,
+          suggestions: aiResult.suggestions,
+          exampleMessage: aiResult.exampleMessage,
+        }
+      : null,
   });
 }

@@ -15,6 +15,9 @@ const VALID_TYPES = [
 // type(scope): summary の形式をパースする正規表現
 const CONVENTIONAL_REGEX = /^(\w+)(?:\(([^)]+)\))?:\s(.+)/;
 
+// valid type + scopeまであるがコロンがない場合を検出（例: chore(.gitignore) message）
+const TYPE_SCOPE_NO_COLON = /^(fix|feat|chore|docs|refactor|test|style|build|ci|perf)\(([^)]+)\)\s(.+)/i;
+
 export function evaluateCommit(message: string): CommitEvaluationResult {
   const issues: string[] = [];
   const suggestions: string[] = [];
@@ -23,6 +26,37 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
 
   let score = 0;
 
+  // --- 0. 特別処理: 既知の自動生成メッセージ ---
+
+  // "Initial commit" / "first commit" → 業界標準の最初のコミット
+  const isFirstCommit = /^(initial|first)\s+commit/i.test(firstLine);
+  if (isFirstCommit) {
+    return {
+      score: 56,
+      rank: "needs_improvement",
+      issues: ["Conventional Commits 形式ではありませんが、最初のコミットとして一般的です"],
+      suggestions: [
+        "今後は `feat(scope): summary` 形式を推奨します",
+        "例: `feat(project): プロジェクトを初期化する`",
+      ],
+      exampleMessage: "feat(project): Next.jsプロジェクトを初期化する",
+    };
+  }
+
+  // "Merge pull request ..." → GitHub自動生成のマージコミット
+  if (/^merge pull request/i.test(firstLine)) {
+    return {
+      score: 60,
+      rank: "needs_improvement",
+      issues: ["GitHub自動生成のマージコミットです"],
+      suggestions: [
+        "マージコミットには Conventional Commits を適用できません。代わりに squash merge を検討してください",
+        "squash merge 後は `feat(scope): summary` 形式のコミットになります",
+      ],
+      exampleMessage: "feat(dashboard): ソート機能を統合する",
+    };
+  }
+
   // --- 1. 形式の明確さ / 20点 ---
   const match = firstLine.match(CONVENTIONAL_REGEX);
   let type = "";
@@ -30,19 +64,32 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
   let summary = firstLine;
 
   if (match) {
+    // 完全な Conventional Commits 形式 chore(.gitignore): summary
     type = match[1];
     scope = match[2] || "";
     summary = match[3];
     score += scope ? 20 : 16;
-  } else if (/^(fix|feat|update|add|remove|change|refactor|fixup|修正)/i.test(firstLine)) {
-    score += 8;
-    issues.push("コミットメッセージの形式が不完全です。`type(scope): summary` の形式を推奨します。");
-    suggestions.push("例: `fix(auth): ログイン時のエラー処理を修正する`");
   } else {
-    issues.push("Conventional Commits の形式になっていません。");
-    suggestions.push("`type(scope): summary` の形式で書き直してください。");
-    if (isJapanese(firstLine)) {
-      suggestions.push("英語の type prefix（feat / fix など）を付けてください。");
+    // コロン欠落: valid type + scopeまではある（例: chore(.gitignore) message）
+    const partialMatch = firstLine.match(TYPE_SCOPE_NO_COLON);
+    if (partialMatch) {
+      type = partialMatch[1];
+      scope = partialMatch[2] || "";
+      summary = partialMatch[3];
+      score += 12;
+      issues.push("`type(scope) ` の後にコロン（:）がありません。");
+      suggestions.push("`type(scope): summary` の形式でコロンを入れてください。");
+    } else if (/^(fix|feat|update|add|remove|change|refactor|fixup|修正)/i.test(firstLine)) {
+      // typeのみある
+      score += 8;
+      issues.push("コミットメッセージの形式が不完全です。`type(scope): summary` の形式を推奨します。");
+      suggestions.push("例: `fix(auth): ログイン時のエラー処理を修正する`");
+    } else {
+      issues.push("Conventional Commits の形式になっていません。");
+      suggestions.push("`type(scope): summary` の形式で書き直してください。");
+      if (isJapanese(firstLine)) {
+        suggestions.push("英語の type prefix（feat / fix など）を付けてください。");
+      }
     }
   }
 
@@ -160,15 +207,27 @@ function containsSpecificInfo(summary: string): boolean {
   const specificPatterns = [
     /ログイン/, /認証/, /エラー/, /ボタン/, /画面/, /ページ/,
     /API/, /DB/, /テーブル/, /フォーム/, /一覧/, /検索/,
+    /導入/, /設定/, /移行/, /初期化/, /構成/, /セットアップ/, /プロジェクト/, /環境/,
     /追加|更新|削除|修正|作成|実装/,
-    /auth|login|button|form|table|search|filter|modal|dialog/,
+    /auth|login|button|form|table|search|filter|modal|dialog/i,
+    /setup|init|config|migrate|upgrade|install|deploy/i,
+    /component|module|service|util|helper|middleware|plugin|hook/i,
+    /readme|license|ci|github|docker|package|version/i,
+    /テスト|ユニット|モック|スタブ|バグ|パッチ|ホットフィックス/,
+    /デプロイ|ビルド|リリース|ロールバック|パイプライン/,
+    /追加|更新|削除|修正|作成|実装|変更|除外|整理|統合|分離/,
+    /git|css|html|jsx|tsx|json|yaml|md|svg/,
+    /ファイル|フォルダ|ディレクトリ|パッケージ|依存|import/,
+    /コンフィグ|設定ファイル|環境変数|シークレット|トークン/,
+    /クラス|インターフェース|型|定数|列挙/,
+    /初期|初回|最初|first|initial/i,
   ];
   return specificPatterns.some((p) => p.test(summary));
 }
 
 function generateExample(type: string, scope: string, summary: string, original: string): string {
+  // ① typeがなく日本語のみのメッセージ → 典型的な改善例を提示
   if (!type && !isJapanese(original)) {
-    // 日本語だけのメッセージ
     if (original.includes("修正") || original.includes("fix")) {
       return "fix(auth): ログイン時のエラー処理を修正する";
     }
@@ -178,21 +237,77 @@ function generateExample(type: string, scope: string, summary: string, original:
     return "feat(scope): 変更内容の要約をここに書く";
   }
 
+  // ② typeが不正 → 推測して修正
   if (!type || !VALID_TYPES.includes(type)) {
-    // typeが不正
     const inferredType = original.includes("追加") || original.includes("add") ? "feat" : "fix";
     return `${inferredType}(${scope || "scope"}): ${summary}`;
   }
 
+  // ③ scopeがない → 追加を促す
   if (!scope && type) {
     return `${type}(scope): ${summary}`;
   }
 
-  // typeとscopeはあるがsummaryが不十分
+  // ④ summaryが短すぎる
   if (summary.length < 10) {
     return `${type}(${scope || "scope"}): 変更内容の具体的な要約をここに書く`;
   }
 
-  // 十分良い形式だが参考例を表示
+  // ⑤ summaryが10文字以上でも具体性が不足 → 拡張した改善例を生成
+  if (!containsSpecificInfo(summary)) {
+    return generateExpandedExample(type, scope);
+  }
+
+  // ⑥ 十分良い形式 → 現状維持
   return `${type}${scope ? `(${scope})` : ""}: ${summary}`;
+}
+
+/**
+ * summaryが具体性不足のときに、 type/scope に基づいて拡張した改善例を生成する
+ */
+function generateExpandedExample(type: string, scope: string): string {
+  // typeごとのテンプレート
+  const templates: Record<string, string[]> = {
+    chore: [
+      `${type}(${scope}): ${scope}周りのプロジェクト設定を導入する`,
+      `${type}(${scope}): ${scope}の初期構成をセットアップする`,
+    ],
+    feat: [
+      `${type}(${scope}): ${scope}に〜機能を追加する`,
+      `${type}(${scope}): ${scope}の〜処理を実装する`,
+    ],
+    fix: [
+      `${type}(${scope}): ${scope}の〜エラーを修正する`,
+      `${type}(${scope}): ${scope}の〜問題を修正する`,
+    ],
+    refactor: [
+      `${type}(${scope}): ${scope}の〜処理をリファクタリングする`,
+    ],
+    docs: [
+      `${type}(${scope}): ${scope}のドキュメントを追加・更新する`,
+    ],
+    style: [
+      `${type}(${scope}): ${scope}のスタイルを調整する`,
+    ],
+    test: [
+      `${type}(${scope}): ${scope}のテストを追加する`,
+    ],
+    build: [
+      `${type}(${scope}): ${scope}のビルド設定を変更する`,
+    ],
+    ci: [
+      `${type}(${scope}): ${scope}のCI設定を変更する`,
+    ],
+    perf: [
+      `${type}(${scope}): ${scope}のパフォーマンスを改善する`,
+    ],
+  };
+
+  const candidates = templates[type];
+  if (candidates && candidates.length > 0) {
+    return candidates[0];
+  }
+
+  // typeが不明な場合のフォールバック
+  return `${type}(${scope}): ${scope}に関する具体的な変更内容`;
 }

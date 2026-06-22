@@ -61,12 +61,17 @@ export default function DashboardPage() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [selectedBranch, setSelectedBranch] = useState("default");
-  const [sortBy, setSortBy] = useState<{ field: "date" | "score"; direction: "asc" | "desc" }>({ field: "date", direction: "desc" });
+  const [sortBy, setSortBy] = useState<{ field: "date" | "score"; direction: "asc" | "desc" }>({ field: "score", direction: "asc" });
 
   const loadCandidates = useCallback(
-    async (currentPage: number) => {
+    async (currentPage: number, sortField?: "date" | "score", sortDirection?: "asc" | "desc") => {
+      const params = new URLSearchParams();
+      params.set("page", String(currentPage));
+      if (sortField) params.set("sortBy", sortField);
+      if (sortDirection) params.set("sortDir", sortDirection);
       const res = await fetch(
-        `/api/repos/${owner}/${name}/candidates?page=${currentPage}`,
+        `/api/repos/${owner}/${name}/candidates?${params.toString()}`,
+        { cache: "no-store" },
       );
       const data = await res.json();
       setCandidates(data);
@@ -80,9 +85,11 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (forceRefresh) params.set("refresh", "true");
       if (b && b !== "default") params.set("branch", b);
+      // キャッシュバスティング: ブラウザキャッシュを無効化
+      params.set("_t", Date.now().toString());
       const qs = params.toString();
       const url = `/api/repos/${owner}/${name}/commits${qs ? `?${qs}` : ""}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
       setAllCommits(Array.isArray(data) ? data : []);
@@ -114,7 +121,7 @@ export default function DashboardPage() {
     async function init() {
       setLoading(true);
       await Promise.all([
-        loadCandidates(1),
+        loadCandidates(1, sortBy.field, sortBy.direction),
         loadAllCommits(),
         loadBranches(),
         loadProgress(),
@@ -132,7 +139,7 @@ export default function DashboardPage() {
     setTab(newTab);
     if (newTab === "candidates") {
       setPage(1);
-      loadCandidates(1);
+      loadCandidates(1, sortBy.field, sortBy.direction);
     } else {
       loadAllCommits();
     }
@@ -141,23 +148,33 @@ export default function DashboardPage() {
   function onPageChange(newPage: number) {
     if (newPage < 1 || (candidates && newPage > candidates.totalPages)) return;
     setPage(newPage);
-    loadCandidates(newPage);
+    loadCandidates(newPage, sortBy.field, sortBy.direction);
   }
 
   async function handleBranchChange(branch: string) {
     setSelectedBranch(branch);
     setPage(1);
     setLoading(true);
-    await Promise.all([loadAllCommits(true, branch), loadCandidates(1)]);
+    await Promise.all([loadAllCommits(true, branch), loadCandidates(1, sortBy.field, sortBy.direction)]);
     setLoading(false);
+  }
+
+  function handleSortChange(newSort: { field: "date" | "score"; direction: "asc" | "desc" }) {
+    setSortBy(newSort);
+    if (tab === "candidates") {
+      setPage(1);
+      loadCandidates(1, newSort.field, newSort.direction);
+    }
   }
 
   async function handleRefresh() {
     setRefreshing(true);
     setPage(1);
+    // コミット再取得（DB削除→GitHub取得→DB保存）を先に完了させる
+    await loadAllCommits(true);
+    // コミットデータが揃ってから候補と進捗を取得
     await Promise.all([
-      loadAllCommits(true),
-      loadCandidates(1),
+      loadCandidates(1, sortBy.field, sortBy.direction),
       loadProgress(),
     ]);
     setRefreshing(false);
@@ -183,20 +200,7 @@ export default function DashboardPage() {
     (c) => c.status === "excellent",
   ).length;
 
-  // 並び替え（スコア / 日付 × 昇順 / 降順）
-  const sortedCandidates = useMemo(() => {
-    if (!candidates?.commits) return candidates;
-    const sorted = [...candidates.commits].sort((a, b) => {
-      let cmp: number;
-      if (sortBy.field === "score") {
-        cmp = a.currentScore - b.currentScore;
-      } else {
-        cmp = new Date(a.committedAt).getTime() - new Date(b.committedAt).getTime();
-      }
-      return sortBy.direction === "asc" ? cmp : -cmp;
-    });
-    return { ...candidates, commits: sorted };
-  }, [candidates, sortBy]);
+  // candidates はサーバー側でソート済み
 
   const sortedCommits = useMemo(() => {
     return [...allCommits].sort((a, b) => {
@@ -294,7 +298,7 @@ export default function DashboardPage() {
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <SortControls sortBy={sortBy} onSortChange={setSortBy} />
+              <SortControls sortBy={sortBy} onSortChange={handleSortChange} />
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -311,7 +315,7 @@ export default function DashboardPage() {
           {/* Candidates tab */}
           {tab === "candidates" && (
             <div className="space-y-4">
-              {sortedCandidates?.commits?.length === 0 ? (
+              {candidates?.commits?.length === 0 ? (
                 <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
                   <p className="text-lg font-medium text-zinc-700">
                     改善候補はありません
@@ -323,7 +327,7 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <div className="grid gap-4">
-                    {sortedCandidates?.commits?.map((commit) => (
+                    {candidates?.commits?.map((commit) => (
                       <ScrollReveal key={commit.id}>
                         <div className="rounded-xl border border-zinc-200 bg-white p-5">
                           <div className="mb-3">

@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export async function GET(
   request: Request,
@@ -13,6 +14,8 @@ export async function GET(
   const { owner, name } = await params;
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+  const sortBy = url.searchParams.get("sortBy") || "score";
+  const sortDir = url.searchParams.get("sortDir") || "asc";
   const perPage = 3;
 
   const repository = await prisma.repository.findFirst({
@@ -29,14 +32,17 @@ export async function GET(
     currentScore: { lt: 70 },
   };
 
+  // orderBy を動的に構築
+  const orderBy: Prisma.CommitOrderByWithRelationInput[] =
+    sortBy === "date"
+      ? [{ committedAt: sortDir === "asc" ? "asc" : "desc" }]
+      : [{ currentScore: sortDir === "asc" ? "asc" : "desc" }, { committedAt: "desc" }];
+
   const [totalCount, rawCommits] = await Promise.all([
     prisma.commit.count({ where }),
     prisma.commit.findMany({
       where,
-      orderBy: [
-        { currentScore: "asc" },
-        { committedAt: "desc" },
-      ],
+      orderBy,
       take: perPage,
       skip: (page - 1) * perPage,
       include: { evaluations: { orderBy: { evaluatedAt: "desc" }, take: 1 } },
@@ -46,7 +52,7 @@ export async function GET(
   const commits = rawCommits.map((c) => ({
     ...c,
     firstIssue: c.evaluations?.[0]?.issues
-      ? (JSON.parse(c.evaluations[0].issues) as string[])[0] ?? null
+      ? (JSON.parse(c.evaluations[0].issues as string) as string[])[0] ?? null
       : null,
     exampleMessage: c.evaluations?.[0]?.exampleMessage ?? null,
   }));
