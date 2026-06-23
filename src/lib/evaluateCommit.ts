@@ -1,9 +1,20 @@
-type CommitEvaluationResult = {
+export type AspectScores = {
+  format: number;        // 観点1: 形式の明確さ 0-20
+  type: number;          // 観点2: 変更種別の適切さ 0-15
+  summary: number;       // 観点3: Summaryの具体性 0-25（AI評価で上書き）
+  why: number;           // 観点4: Why・背景の説明 0-20（AI評価で上書き）
+  readability: number;   // 観点5: 読みやすさ 0-10
+  traceability: number;  // 観点6: 業務での追跡しやすさ 0-10
+};
+
+export type CommitEvaluationResult = {
   score: number;
   rank: "excellent" | "good" | "needs_improvement" | "poor";
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
+  /** 観点別スコア（AI統合前に使う内部値） */
+  aspectScores: AspectScores;
 };
 
 // Conventional Commits の type一覧
@@ -18,11 +29,28 @@ const CONVENTIONAL_REGEX = /^(\w+)(?:\(([^)]+)\))?:\s(.+)/;
 // valid type + scopeまであるがコロンがない場合を検出（例: chore(.gitignore) message）
 const TYPE_SCOPE_NO_COLON = /^(fix|feat|chore|docs|refactor|test|style|build|ci|perf)\(([^)]+)\)\s(.+)/i;
 
+function getRank(score: number): CommitEvaluationResult["rank"] {
+  return score >= 90 ? "excellent" :
+    score >= 70 ? "good" :
+    score >= 50 ? "needs_improvement" :
+    "poor";
+}
+
 export function evaluateCommit(message: string): CommitEvaluationResult {
   const issues: string[] = [];
   const suggestions: string[] = [];
   const firstLine = message.split("\n")[0];
   const body = message.split("\n").slice(2).join("\n").trim();
+
+  // 観点別スコア
+  const aspectScores: AspectScores = {
+    format: 0,
+    type: 0,
+    summary: 0,
+    why: 0,
+    readability: 0,
+    traceability: 0,
+  };
 
   let score = 0;
 
@@ -31,13 +59,21 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
   // "Initial commit" / "first commit" → 業界標準の最初のコミット
   const isFirstCommit = /^(initial|first)\s+commit/i.test(firstLine);
   if (isFirstCommit) {
+    aspectScores.summary = 25;
+    aspectScores.why = 20;
+    aspectScores.readability = 10;
+    aspectScores.traceability = 5;
     return {
-      score: 56,
+      score: 60,
       rank: "needs_improvement",
-      issues: ["Conventional Commits 形式ではありませんが、最初のコミットとして一般的です"],
+      aspectScores,
+      issues: [
+        "Conventional Commits 形式（type(scope): summary）ではありません",
+        "scope（変更範囲）や課題番号がありません",
+      ],
       suggestions: [
-        "今後は `feat(scope): summary` 形式を推奨します",
-        "例: `feat(project): プロジェクトを初期化する`",
+        "`feat(scope): summary` 形式にするとスコアが上がります",
+        "例: `feat(project): Next.jsプロジェクトを初期化する`",
       ],
       exampleMessage: "feat(project): Next.jsプロジェクトを初期化する",
     };
@@ -45,13 +81,19 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
 
   // "Merge pull request ..." → GitHub自動生成のマージコミット
   if (/^merge pull request/i.test(firstLine)) {
+    aspectScores.type = 15;
+    aspectScores.summary = 25;
+    aspectScores.readability = 10;
+    aspectScores.traceability = 10;
     return {
       score: 60,
       rank: "needs_improvement",
-      issues: ["GitHub自動生成のマージコミットです"],
+      aspectScores,
+      issues: [
+        "自動生成メッセージのため Conventional Commits 形式ではありません",
+      ],
       suggestions: [
-        "マージコミットには Conventional Commits を適用できません。代わりに squash merge を検討してください",
-        "squash merge 後は `feat(scope): summary` 形式のコミットになります",
+        "squash merge を使うと `feat(scope): summary` 形式で統一されスコアが上がります",
       ],
       exampleMessage: "feat(dashboard): ソート機能を統合する",
     };
@@ -68,7 +110,8 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
     type = match[1];
     scope = match[2] || "";
     summary = match[3];
-    score += scope ? 20 : 16;
+    aspectScores.format = scope ? 20 : 16;
+    score += aspectScores.format;
   } else {
     // コロン欠落: valid type + scopeまではある（例: chore(.gitignore) message）
     const partialMatch = firstLine.match(TYPE_SCOPE_NO_COLON);
@@ -76,11 +119,13 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
       type = partialMatch[1];
       scope = partialMatch[2] || "";
       summary = partialMatch[3];
+      aspectScores.format = 12;
       score += 12;
       issues.push("`type(scope) ` の後にコロン（:）がありません。");
       suggestions.push("`type(scope): summary` の形式でコロンを入れてください。");
     } else if (/^(fix|feat|update|add|remove|change|refactor|fixup|修正)/i.test(firstLine)) {
       // typeのみある
+      aspectScores.format = 8;
       score += 8;
       issues.push("コミットメッセージの形式が不完全です。`type(scope): summary` の形式を推奨します。");
       suggestions.push("例: `fix(auth): ログイン時のエラー処理を修正する`");
@@ -95,10 +140,12 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
 
   // --- 2. 変更種別の適切さ / 15点 ---
   if (type && VALID_TYPES.includes(type)) {
+    aspectScores.type = 15;
     score += 15;
   } else if (type) {
     const closeMatch = VALID_TYPES.find((t) => type.startsWith(t) || t.startsWith(type));
     if (closeMatch) {
+      aspectScores.type = 8;
       score += 8;
       issues.push(`変更種別 \`${type}\` は \`${closeMatch}\` に近い表記です。統一を推奨します。`);
       suggestions.push(`\`${type}\` ではなく \`${closeMatch}\` を使ってください。`);
@@ -111,14 +158,18 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
   }
 
   // --- 3. Summaryの具体性 / 25点 ---
+  // ★ ルールベースのスコアを記録（後でAI評価に置き換えられる）
   if (summary.length >= 10 && summary.length <= 100) {
     if (containsSpecificInfo(summary)) {
+      aspectScores.summary = 25;
       score += 25;
     } else if (summary.length >= 15) {
+      aspectScores.summary = 15;
       score += 15;
       issues.push("変更内容はある程度伝わりますが、固有名詞（機能名・画面名など）を入れるとさらに良くなります。");
       suggestions.push("例: `認証機能を追加する` ではなく `Googleログイン機能を追加する` のように具体的に。");
     } else {
+      aspectScores.summary = 5;
       score += 5;
       issues.push("変更内容が曖昧です。何を変更したか具体的に書いてください。");
       suggestions.push("変更した機能・画面・処理の名前を含めてください。");
@@ -135,25 +186,30 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
         issues.push("1単語だけでは変更内容が伝わりません。");
         suggestions.push("`fix bug` ではなく `fix(auth): ログインエラーを修正する` のように具体的に。");
       } else {
+        aspectScores.summary = 5;
         score += 5;
         issues.push("もう少し具体的に書くと良いでしょう。");
       }
     }
   } else {
     // summaryなし
-    score += 0;
     issues.push("変更内容が全く書かれていません。");
     suggestions.push("必ず変更内容を要約してください。");
   }
 
   // --- 4. Why・背景の説明 / 20点 ---
+  // ★ ルールベースのスコアを記録（後でAI評価に置き換えられる）
   if (body.length > 0) {
+    aspectScores.why = 20;
     score += 20;
-  } else if (summary.includes("ため") || summary.includes("ように") || summary.includes("\u305f\u3081")) {
+  } else if (summary.includes("ため") || summary.includes("ように") || summary.includes("ため")) {
+    aspectScores.why = 14;
     score += 14;
   } else if (summary.length < 20 && /typo|fix|軽微|微修正|minor/i.test(summary)) {
+    aspectScores.why = 12;
     score += 12;
   } else if (summary.length > 30 && !/fix|bug|typo/i.test(summary) && !isJapanese(summary)) {
+    aspectScores.why = 14;
     score += 14;
     suggestions.push("必要に応じて本文（body）に変更理由を追記すると良いです。");
   } else {
@@ -163,12 +219,15 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
   // --- 5. 読みやすさ / 10点 ---
   const len = firstLine.length;
   if (len >= 10 && len <= 72) {
+    aspectScores.readability = 10;
     score += 10;
   } else if (len >= 5 && len <= 100) {
+    aspectScores.readability = 6;
     score += 6;
     issues.push("1行の文字数が推奨範囲（10〜72文字）を超えています。");
     suggestions.push("72文字以内に収める読みやすいコミットメッセージを心がけてください。");
   } else {
+    aspectScores.readability = 2;
     score += 2;
     issues.push("1行の文字数が適切ではありません。");
     suggestions.push("10〜72文字程度に要約してください。");
@@ -180,26 +239,67 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
   const hasFeatureName = /画面|機能|ページ|ボタン|モーダル|フォーム|テーブル|ヘッダー|フッター|サイドバー/.test(summary);
 
   if (hasIssueNumber || (hasScope && hasFeatureName)) {
+    aspectScores.traceability = 10;
     score += 10;
   } else if (hasScope) {
+    aspectScores.traceability = 6;
     score += 6;
   }
 
   // --- ランク判定 ---
-  const rank: CommitEvaluationResult["rank"] =
-    score >= 90 ? "excellent" :
-    score >= 70 ? "good" :
-    score >= 50 ? "needs_improvement" :
-    "poor";
+  const rank = getRank(score);
 
   // --- 改善例の生成 ---
   const exampleMessage = generateExample(type, scope, summary, message);
 
-  return { score, rank, issues, suggestions, exampleMessage };
+  return { score, rank, aspectScores, issues, suggestions, exampleMessage };
+}
+
+/**
+ * ルールベース評価（観点1,2,5,6）とAI評価（観点3,4）を統合する
+ * @param ruleResult evaluateCommit() の結果
+ * @param aiResult aiEvaluateCommit() の結果（null=AI未評価ならルール結果をそのまま）
+ */
+export function combineWithAi(
+  ruleResult: CommitEvaluationResult,
+  aiResult: { summaryScore: number; whyScore: number; issues: string[]; suggestions: string[]; exampleMessage: string } | null,
+): CommitEvaluationResult {
+  if (!aiResult) return ruleResult;
+
+  const { aspectScores } = ruleResult;
+
+  // ルール: 観点1+2+5+6 (55点満点) + AI: 観点3+4 (45点満点)
+  const combinedScore =
+    aspectScores.format +
+    aspectScores.type +
+    aiResult.summaryScore +
+    aiResult.whyScore +
+    aspectScores.readability +
+    aspectScores.traceability;
+
+  const rank = getRank(combinedScore);
+
+  // issues/suggestions はAIとルールを統合（重複除去）
+  const allIssues = [...new Set([...ruleResult.issues, ...aiResult.issues])];
+  const allSuggestions = [...new Set([...ruleResult.suggestions, ...aiResult.suggestions])];
+
+  return {
+    score: combinedScore,
+    rank,
+    aspectScores: {
+      ...aspectScores,
+      summary: aiResult.summaryScore,
+      why: aiResult.whyScore,
+    },
+    issues: allIssues,
+    suggestions: allSuggestions,
+    // AIのexampleMessageを優先（より良い例を生成できるため）
+    exampleMessage: aiResult.exampleMessage || ruleResult.exampleMessage,
+  };
 }
 
 function isJapanese(text: string): boolean {
-  return /[\u3000-\u9FFF\uF900-\uFAFF]/.test(text);
+  return /[　-鿿豈-﫿]/.test(text);
 }
 
 function containsSpecificInfo(summary: string): boolean {
