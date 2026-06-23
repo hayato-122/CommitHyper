@@ -1,11 +1,16 @@
 /**
  * AIによるコミットメッセージ評価サービス
- * Gemini Flash API を利用して、ルールベースより深い評価と改善提案を生成する
+ * Gemini Flash API を利用して、観点3（具体性）と観点4（Why）を評価する
+ * このスコアはルールベース評価（観点1,2,5,6=55点満点）と統合される
  */
 
 export type AiEvaluationResult = {
+  /** 観点3 + 観点4 の合計点（0〜45点） */
   score: number;
-  rank: "excellent" | "good" | "needs_improvement" | "poor";
+  /** 観点3: Summaryの具体性（0〜25点） */
+  summaryScore: number;
+  /** 観点4: Why・背景の説明（0〜20点） */
+  whyScore: number;
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
@@ -15,37 +20,50 @@ const GEMINI_API_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
 
 const EVALUATION_PROMPT = `あなたはコミットメッセージ評価の専門家です。
-与えられたコミットメッセージを以下の6つの軸で採点し、JSON形式で返してください。
+与えられたコミットメッセージを以下の2つの軸で採点し、JSON形式で返してください。
 
 ## 評価軸
-1. **形式の明確さ（20点）**: Conventional Commits 形式 (type(scope): summary) に従っているか
-2. **変更種別の適切さ（15点）**: feat / fix / chore / refactor / docs / test / style / build / ci / perf のどれかが適切に選ばれているか
-3. **Summaryの具体性（25点）**: 何を変更したか具体的な機能名・処理名が含まれているか
-4. **Why・背景の説明（20点）**: なぜ変更したかが伝わるか（本文bodyがあれば加点）
-5. **読みやすさ（10点）**: 1行72文字以内に収まっているか
-6. **業務での追跡しやすさ（10点）**: 課題番号やスコープが含まれているか
+
+### 観点3: Summaryの具体性（25点）
+コミットメッセージの1行目（summary）が「何を変更したか」を具体的に伝えているか評価してください。
+
+- **25点**: 変更した機能名・画面名・処理名など固有名詞を含み、何を変えたか明確に伝わる
+  - 例: \`authにGoogleログインを追加する\`、\`ダッシュボードのソート機能を修正する\`
+- **15点**: 大まかに何をしたかは伝わるが、固有名詞が足りずやや曖昧
+  - 例: \`機能を追加する\`、\`バグを修正する\`
+- **5点**: 変更内容が曖昧で、何を変えたか具体的にわからない
+  - 例: \`修正\`、\`更新\`、\`色々直した\`
+- **0点**: 変更内容が全く書かれていない、または1単語だけ
+
+### 観点4: Why・背景の説明（20点）
+「なぜこの変更が必要か」が伝わるか評価してください。**コミットのbody（2行目以降の文章）** も確認して判断すること。
+
+- **20点**: bodyに変更理由や背景が明確に説明されている
+  - 例: bodyに \`ログイン失敗時のエラーがユーザーに表示されないため\` など
+- **12点**: summaryに理由が含まれている、または変更が自明（初期化・セットアップ・typo修正など）
+  - 例: \`プロジェクトを初期化する\`（初期化は理由が自明）
+- **0点**: Whyが全く伝わらない
 
 ## 採点基準
-- 90点以上: excellent
-- 70-89点: good
-- 50-69点: needs_improvement
-- 49点以下: poor
+- 厳しすぎず、Conventional Commits のベストプラクティスに従う
+- summaryだけで判断せず、body（空行以降）も読むこと
+- 初期化・セットアップ・typo修正・軽微なスタイル変更は「Whyが自明」として12点を許容する
 
 ## 応答JSON形式（日本語で出力）
 {
-  "score": 数値,
-  "rank": "excellent" | "good" | "needs_improvement" | "poor",
+  "summaryScore": 数値（0〜25）,
+  "whyScore": 数値（0〜20）,
   "issues": ["問題点1", "問題点2", ...],
   "suggestions": ["改善提案1", "改善提案2", ...],
   "exampleMessage": "改善後のコミットメッセージ例"
 }
 
-採点基準は厳しすぎず、Conventional Commits のベストプラクティスに従ってください。
-exampleMessage は元のメッセージの意図を尊重しつつ、より良い形に改善したものを提示してください。
-issues は最大3つ、suggestions は最大3つに収めてください。`;
+- issues は最大3つ、suggestions は最大3つに収める
+- exampleMessage は元のメッセージの意図を尊重しつつ、より良い形に改善したものを提示する
+- issues が空なら空配列 [] を返す`;
 
 /**
- * コミットメッセージをAI（Gemini Flash）で評価する
+ * コミットメッセージの観点3（具体性）・観点4（Why）をAI（Gemini Flash）で評価する
  * GEMINI_API_KEY が設定されていない場合は null を返す
  */
 export async function aiEvaluateCommit(
@@ -67,7 +85,7 @@ export async function aiEvaluateCommit(
             parts: [
               { text: EVALUATION_PROMPT },
               {
-                text: `評価対象のコミットメッセージ:\n\`\`\`\n${message}\n\`\`\``,
+                text: `評価対象のコミットメッセージ:\`\`\`\n${message}\n\`\`\``,
               },
             ],
           },
@@ -105,25 +123,27 @@ export async function aiEvaluateCommit(
       return null;
     }
 
-    const result: AiEvaluationResult = JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonStr);
 
-    // バリデーション
-    if (
-      typeof result.score !== "number" ||
-      result.score < 0 ||
-      result.score > 100
-    ) {
-      throw new Error(`Invalid score: ${result.score}`);
-    }
+    // --- バリデーション ---
+    const summaryScore = typeof parsed.summaryScore === "number" ? parsed.summaryScore : 0;
+    const whyScore = typeof parsed.whyScore === "number" ? parsed.whyScore : 0;
+
+    // スコア範囲をクランプ
+    const validSummaryScore = Math.max(0, Math.min(25, summaryScore));
+    const validWhyScore = Math.max(0, Math.min(20, whyScore));
+
+    const score = validSummaryScore + validWhyScore;
 
     return {
-      score: result.score,
-      rank: validateRank(result.rank),
-      issues: Array.isArray(result.issues) ? result.issues.slice(0, 3) : [],
-      suggestions: Array.isArray(result.suggestions)
-        ? result.suggestions.slice(0, 3)
+      score,
+      summaryScore: validSummaryScore,
+      whyScore: validWhyScore,
+      issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 3) : [],
+      suggestions: Array.isArray(parsed.suggestions)
+        ? parsed.suggestions.slice(0, 3)
         : [],
-      exampleMessage: result.exampleMessage || message,
+      exampleMessage: typeof parsed.exampleMessage === "string" ? parsed.exampleMessage : message,
     };
   } catch (error) {
     console.error("[aiEvaluate] Failed to evaluate commit:", error);
@@ -149,23 +169,4 @@ function extractJson(text: string): string | null {
   }
 
   return null;
-}
-
-/**
- * rank の値をバリデーションする
- */
-function validateRank(
-  rank: string,
-): "excellent" | "good" | "needs_improvement" | "poor" {
-  const validRanks = [
-    "excellent",
-    "good",
-    "needs_improvement",
-    "poor",
-  ] as const;
-  if (validRanks.includes(rank as (typeof validRanks)[number])) {
-    return rank as "excellent" | "good" | "needs_improvement" | "poor";
-  }
-  // スコアから自動判定
-  return "needs_improvement";
 }

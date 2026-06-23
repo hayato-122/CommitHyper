@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { evaluateCommit } from "@/lib/evaluateCommit";
+import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
 export async function GET(
@@ -14,7 +14,7 @@ export async function GET(
 
   const { commitId } = await params;
 
-  // ルールベース評価をDBから取得（commit取得時に行われたもの）
+  // DBから最新の評価を取得（初回分析時にルール+AIが保存されている）
   const evaluation = await prisma.commitEvaluation.findFirst({
     where: { commitId },
     orderBy: { evaluatedAt: "desc" },
@@ -24,35 +24,16 @@ export async function GET(
     return Response.json({ error: "Evaluation not found" }, { status: 404 });
   }
 
-  // コミットメッセージを取得（AI評価に使う）
-  const commit = await prisma.commit.findUnique({
-    where: { id: commitId },
-  });
-
-  // AI評価（Gemini Flash）をオンデマンド生成
-  // GEMINI_API_KEY が設定されていない場合は null になる
-  const aiResult = commit ? await aiEvaluateCommit(commit.message) : null;
-
   return Response.json({
-    // ルールベース評価（従来の評価）
     score: evaluation.score,
     rank: evaluation.rank,
     issues: JSON.parse(evaluation.issues as string) as string[],
     suggestions: JSON.parse(evaluation.suggestions as string) as string[],
     exampleMessage: evaluation.exampleMessage,
-    // AI評価（Gemini Flash、オプショナル）
-    ai: aiResult
-      ? {
-          score: aiResult.score,
-          rank: aiResult.rank,
-          issues: aiResult.issues,
-          suggestions: aiResult.suggestions,
-          exampleMessage: aiResult.exampleMessage,
-        }
-      : null,
   });
 }
 
+// POST: 再評価（改善メッセージの評価のみ、DB保存はしない）
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
@@ -77,35 +58,26 @@ export async function POST(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
-  // ★ 評価のみ実行（DBへの書き込みは行わない）
-  // 点数・XPの反映は PUT で行う
-  const evalResult = evaluateCommit(improvedMessage);
+  // ルール評価とAI評価を並列実行
+  const ruleResult = evaluateCommit(improvedMessage);
   const aiResult = await aiEvaluateCommit(improvedMessage);
 
+  // AI結果があれば統合、なければルール評価をそのまま
+  const combined = combineWithAi(ruleResult, aiResult);
+
   return Response.json({
-    score: evalResult.score,
-    rank: evalResult.rank,
-    issues: evalResult.issues,
-    suggestions: evalResult.suggestions,
-    exampleMessage: evalResult.exampleMessage,
-    passed: evalResult.score >= 70,
-    // XPはまだ付与されていないことを明示
+    score: combined.score,
+    rank: combined.rank,
+    issues: combined.issues,
+    suggestions: combined.suggestions,
+    exampleMessage: combined.exampleMessage,
+    passed: combined.score >= 70,
     xpGained: 0,
     pendingApply: true,
-    // AI評価（参考情報）
-    ai: aiResult
-      ? {
-          score: aiResult.score,
-          rank: aiResult.rank,
-          issues: aiResult.issues,
-          suggestions: aiResult.suggestions,
-          exampleMessage: aiResult.exampleMessage,
-        }
-      : null,
   });
 }
 
-// PUT: 改善メッセージをDBに反映し、XPを付与する（「GitHubに反映」ボタン用）
+// PUT: 改善メッセージをDBに反映し、XPを付与する（「修正完了」ボタン用）
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
@@ -130,8 +102,10 @@ export async function PUT(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
-  // 最終評価を実行
-  const evalResult = evaluateCommit(improvedMessage);
+  // 最終評価（ルール+AI統合）
+  const ruleResult = evaluateCommit(improvedMessage);
+  const aiResult = await aiEvaluateCommit(improvedMessage);
+  const combined = combineWithAi(ruleResult, aiResult);
 
   // ImprovementAttempt を保存
   const attempt = await prisma.improvementAttempt.create({
@@ -141,37 +115,37 @@ export async function PUT(
       beforeMessage: commit.message,
       afterMessage: improvedMessage,
       beforeScore: commit.currentScore,
-      afterScore: evalResult.score,
-      passed: evalResult.score >= 70,
+      afterScore: combined.score,
+      passed: combined.score >= 70,
       xpGained: 0,
     },
   });
 
   // currentScore 更新（改善していれば）
-  if (evalResult.score > commit.currentScore) {
+  if (combined.score > commit.currentScore) {
     await prisma.commit.update({
       where: { id: commit.id },
-      data: { currentScore: evalResult.score },
+      data: { currentScore: combined.score },
     });
   }
 
   let xpGained = 0;
 
   // 合格（70点以上）→ XP付与 + status更新
-  if (evalResult.score >= 70) {
+  if (combined.score >= 70) {
     await prisma.commit.update({
       where: { id: commit.id },
       data: { status: "improved" },
     });
 
-    xpGained = evalResult.score >= 90 ? 15 : 10;
+    xpGained = combined.score >= 90 ? 15 : 10;
 
     await prisma.xpEvent.create({
       data: {
         userId: session.user.id,
-        type: evalResult.score >= 90 ? "improvement_excellent" : "improvement_passed",
+        type: combined.score >= 90 ? "improvement_excellent" : "improvement_passed",
         amount: xpGained,
-        reason: `コミット改善に合格（${evalResult.score}点）`,
+        reason: `コミット改善に合格（${combined.score}点）`,
         relatedCommitId: commit.id,
       },
     });
@@ -183,14 +157,14 @@ export async function PUT(
   }
 
   // 不合格だが50点以上 → 努力XPを微量付与
-  if (evalResult.score >= 50 && evalResult.score < 70) {
+  if (combined.score >= 50 && combined.score < 70) {
     xpGained = 3;
     await prisma.xpEvent.create({
       data: {
         userId: session.user.id,
         type: "retry_bonus",
         amount: xpGained,
-        reason: `改善努力（${evalResult.score}点）`,
+        reason: `改善努力（${combined.score}点）`,
         relatedCommitId: commit.id,
       },
     });
@@ -213,9 +187,9 @@ export async function PUT(
   });
 
   return Response.json({
-    score: evalResult.score,
-    rank: evalResult.rank,
-    passed: evalResult.score >= 70,
+    score: combined.score,
+    rank: combined.rank,
+    passed: combined.score >= 70,
     xpGained,
     user,
     applied: true,
