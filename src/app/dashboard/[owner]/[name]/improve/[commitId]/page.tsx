@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Header } from "@/components/Header";
+import { DiffViewer } from "@/components/DiffViewer";
+import { EvaluationCard } from "@/components/EvaluationCard";
 import { ArrowLeft } from "lucide-react";
 
 type EvalData = {
@@ -187,76 +189,7 @@ export default function ImprovePage() {
           <div className="flex h-10 shrink-0 items-center border-b border-mist px-5">
             <span className="text-caption font-medium text-zinc-500">diff</span>
           </div>
-          {diff ? (
-            <div className="flex-1 overflow-auto font-mono text-caption leading-relaxed">
-              {diff.split("\n").map((line, i) => {
-                if (line.startsWith("+") && !line.startsWith("+++")) {
-                  return (
-                    <div key={i} className="flex">
-                      <span className="w-10 shrink-0 select-none bg-green-50 text-right pr-3 text-[10px] leading-5 text-green-400">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 bg-green-50 px-3 text-green-800 break-all">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                if (line.startsWith("-") && !line.startsWith("---")) {
-                  return (
-                    <div key={i} className="flex">
-                      <span className="w-10 shrink-0 select-none bg-red-50 text-right pr-3 text-[10px] leading-5 text-red-400">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 bg-red-50 px-3 text-red-800 break-all">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                if (line.startsWith("@@")) {
-                  return (
-                    <div key={i} className="flex">
-                      <span className="w-10 shrink-0 select-none bg-blue-50 text-right pr-3 text-[10px] leading-5 text-blue-300">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 bg-blue-50 px-3 text-blue-600 font-semibold">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                if (
-                  line.startsWith("diff --git") ||
-                  line.startsWith("---") ||
-                  line.startsWith("+++")
-                ) {
-                  return (
-                    <div key={i} className="flex bg-pearl/50">
-                      <span className="w-10 shrink-0 select-none text-right pr-3 text-[10px] leading-5 text-zinc-300">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 px-3 text-zinc-500 font-medium">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                return (
-                  <div key={i} className="flex">
-                    <span className="w-10 shrink-0 select-none text-right pr-3 text-[10px] leading-5 text-zinc-300">
-                      {i + 1}
-                    </span>
-                    <span className="flex-1 px-3 text-zinc-700">{line}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center">
-              <p className="text-caption text-zinc-400">diffを読み込めませんでした</p>
-            </div>
-          )}
+          <DiffViewer diff={diff} />
         </div>
 
         {/* ===== Right: Reference + Input ===== */}
@@ -282,75 +215,17 @@ export default function ImprovePage() {
             {/* Evaluation Card — activeEvalが再評価時に差し替わる */}
             {activeEval && !result?.applied && (
               <ScrollReveal>
-                <div className="mb-6 rounded-2xl border border-mist bg-white p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-body-sm font-semibold text-midnight-ink">
-                      評価結果
-                      {hasReevaluated && (
-                        <span className="ml-2 text-caption font-normal text-brand-teal">
-                          （再評価）
-                        </span>
-                      )}
-                    </h2>
-                    <span className="text-heading-sm font-bold text-midnight-ink">
-                      {activeEval.score}
-                      <span className="text-body-sm font-normal text-zinc-500">/100</span>
-                    </span>
-                  </div>
-
-                  {/* Issues */}
-                  {activeEval.issues.length > 0 && (
-                    <div className="mb-4">
-                      <p className="mb-2 text-caption font-medium text-zinc-500">
-                        問題点
-                      </p>
-                      <ul className="space-y-1.5">
-                        {activeEval.issues.map((issue, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-body-sm text-zinc-600 leading-relaxed"
-                          >
-                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                            <span>{issue}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Suggestions */}
-                  {activeEval.suggestions.length > 0 && (
-                    <div className="mb-4">
-                      <p className="mb-2 text-caption font-medium text-zinc-500">
-                        改善提案
-                      </p>
-                      <ul className="space-y-1.5">
-                        {activeEval.suggestions.map((s, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-body-sm text-zinc-600 leading-relaxed"
-                          >
-                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-teal" />
-                            <span>{s}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Good Example */}
-                  <div className="rounded-xl border border-mist bg-snow p-4">
-                    <p className="mb-1.5 text-caption font-medium text-zinc-500">
-                      良いコミットメッセージ例
-                    </p>
-                    <p className="font-mono text-body-sm leading-relaxed text-midnight-ink">
-                      {activeEval.exampleMessage}
-                    </p>
-                  </div>
-
-                  {/* GitHub反映ボタン（再評価後のみ・ガイド非表示時） */}
-                  {hasReevaluated && !showApplyGuide && (
-                    <div className="mt-4 border-t border-mist pt-4">
+                <EvaluationCard
+                  score={activeEval.score}
+                  issues={activeEval.issues}
+                  suggestions={activeEval.suggestions}
+                  exampleMessage={activeEval.exampleMessage}
+                  label={hasReevaluated ? "評価結果（再評価）" : "評価結果"}
+                />
+                {/* GitHub反映ボタン（再評価後のみ・ガイド非表示時） */}
+                <div className="mt-4 border-t border-mist pt-4">
+                  {!showApplyGuide ? (
+                    <>
                       <p className="mb-3 text-caption text-zinc-400">
                         メッセージに問題がなければ「GitHubに反映」から修正手順を確認できます。
                       </p>
@@ -360,17 +235,12 @@ export default function ImprovePage() {
                       >
                         GitHubに反映する
                       </button>
-                    </div>
-                  )}
-
-                  {/* GitHub反映ガイドパネル */}
-                  {showApplyGuide && (
-                    <div className="mt-4 border-t border-mist pt-4">
+                    </>
+                  ) : (
+                    <>
                       <h3 className="mb-3 text-body-sm font-semibold text-midnight-ink">
                         GitHubでコミットメッセージを修正
                       </h3>
-
-                      {/* Step 1: コピー */}
                       <div className="mb-3 rounded-xl border border-brand-teal/30 bg-snow p-4">
                         <p className="mb-2 text-caption font-medium text-brand-teal">
                           Step 1 — 改善メッセージをコピー
@@ -385,8 +255,6 @@ export default function ImprovePage() {
                           {copied ? "コピーしました ✓" : "クリップボードにコピー"}
                         </button>
                       </div>
-
-                      {/* Step 2: GitHubでamend */}
                       <div className="mb-3 rounded-xl border border-mist bg-snow p-4">
                         <p className="mb-2 text-caption font-medium text-zinc-500">
                           Step 2 — ターミナルでコミットを修正
@@ -414,8 +282,6 @@ export default function ImprovePage() {
                           GitHubでコミットを確認する ↗
                         </a>
                       </div>
-
-                      {/* Step 3: 完了 */}
                       <div className="rounded-xl border border-mist bg-snow p-4">
                         <p className="mb-2 text-caption font-medium text-zinc-500">
                           Step 3 — 修正完了
@@ -439,7 +305,7 @@ export default function ImprovePage() {
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
               </ScrollReveal>

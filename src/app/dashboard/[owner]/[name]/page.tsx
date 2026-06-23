@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState, useRef } from "react";
-import { useParams, useRouter, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Header } from "@/components/Header";
+import { CommitCard } from "@/components/CommitCard";
+import { Pager } from "@/components/Pager";
 import {
   ArrowLeft,
   RotateCw,
@@ -50,8 +52,6 @@ type AnalyzeState = {
 
 export default function DashboardPage() {
   const params = useParams();
-  const router = useRouter();
-  const pathname = usePathname();
   const owner = params.owner as string;
   const name = params.name as string;
 
@@ -542,71 +542,24 @@ export default function DashboardPage() {
               ) : (
                 candidateCommits.map((commit) => (
                   <ScrollReveal key={commit.id}>
-                    <div className="rounded-xl border border-zinc-200 bg-white p-5">
-                      <div className="flex gap-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-mono text-xs text-zinc-400">
-                            {commit.sha.slice(0, 7)}
-                          </p>
-                          <p className="mt-1 text-sm leading-relaxed text-zinc-800">
-                            {commit.message}
-                          </p>
-                          <p className="mt-2 text-xs text-zinc-500">
-                            {commit.authorName} ·{" "}
-                            {new Date(commit.committedAt).toLocaleDateString(
-                              "ja-JP",
-                            )}
-                          </p>
-                          {commit.firstIssue && (
-                            <p className="mt-2 text-xs text-red-600">
-                              {commit.firstIssue}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end justify-between gap-2">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
-                          >
-                            {commit.currentScore}/100
-                          </span>
-                          <button
-                            onClick={() =>
-                              router.push(
-                                `/dashboard/${owner}/${name}/improve/${commit.id}`,
-                              )
-                            }
-                            className="rounded-lg bg-brand-teal px-4 py-1.5 text-xs font-medium text-white hover:brightness-110"
-                          >
-                            改善する
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    <CommitCard
+                      sha={commit.sha}
+                      message={commit.message}
+                      authorName={commit.authorName}
+                      committedAt={commit.committedAt}
+                      score={commit.currentScore}
+                      firstIssue={commit.firstIssue}
+                      improveHref={`/dashboard/${owner}/${name}/improve/${commit.id}`}
+                    />
                   </ScrollReveal>
                 ))
               )}
-              {totalPages > 1 && (
-                <div className="mt-6 flex items-center justify-center gap-4">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={page <= 1}
-                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-30"
-                  >
-                    ←
-                  </button>
-                  <span className="text-sm font-medium text-zinc-600">
-                    {String(page).padStart(2, "0")} /{" "}
-                    {String(totalPages).padStart(2, "0")}
-                  </span>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={page >= totalPages}
-                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-30"
-                  >
-                    →
-                  </button>
-                </div>
-              )}
+              <Pager
+                page={page}
+                totalPages={totalPages}
+                totalCount={totalCount}
+                onPageChange={setPage}
+              />
             </div>
           )}
 
@@ -614,41 +567,15 @@ export default function DashboardPage() {
             <div className="space-y-3">
               {sortCommits(allCommits).map((commit) => (
                 <ScrollReveal key={commit.id}>
-                  <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                    <div className="flex gap-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-mono text-xs text-zinc-400">
-                          {commit.sha.slice(0, 7)}
-                        </p>
-                        <p className="mt-1 text-sm leading-relaxed text-zinc-800">
-                          {commit.message}
-                        </p>
-                        <p className="mt-2 text-xs text-zinc-500">
-                          {commit.authorName} ·{" "}
-                          {new Date(commit.committedAt).toLocaleDateString(
-                            "ja-JP",
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end justify-between gap-2">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${commit.currentScore < 70 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
-                        >
-                          {commit.currentScore}/100
-                        </span>
-                        <button
-                          onClick={() =>
-                            router.push(
-                              `/dashboard/${owner}/${name}/improve/${commit.id}`,
-                            )
-                          }
-                          className="rounded-lg bg-brand-teal px-4 py-1.5 text-xs font-medium text-white hover:brightness-110"
-                        >
-                          改善する
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <CommitCard
+                    sha={commit.sha}
+                    message={commit.message}
+                    authorName={commit.authorName}
+                    committedAt={commit.committedAt}
+                    score={commit.currentScore}
+                    improveHref={`/dashboard/${owner}/${name}/improve/${commit.id}`}
+                    density="compact"
+                  />
                 </ScrollReveal>
               ))}
             </div>
