@@ -3,6 +3,7 @@ import Link from "next/link";
 import { middlewareAuth } from "@/auth.config";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
+import { QuickEvaluateForm } from "@/components/QuickEvaluateForm";
 import { FeaturesSection } from "@/components/FeaturesSection";
 import { HowItWorksSection } from "@/components/HowItWorksSection";
 import { CTASection } from "@/components/CTASection";
@@ -28,6 +29,7 @@ export default async function Home() {
       />
       <main className="flex-1">
         <HeroSection />
+        <QuickEvaluateForm />
         <FeaturesSection />
         <HowItWorksSection />
         <CTASection />
