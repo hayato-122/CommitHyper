@@ -8,7 +8,7 @@ import { LandingFooter } from "@/components/LandingFooter";
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-pearl">
-      <Header simple />
+      <Header />
 
       <main className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 shadow-subtle">

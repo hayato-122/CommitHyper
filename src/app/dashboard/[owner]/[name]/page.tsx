@@ -3,16 +3,14 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { signOut } from "next-auth/react";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import { Header } from "@/components/Header";
 import {
   ArrowLeft,
   RotateCw,
   ArrowUpDown,
-  LogOut,
   Sparkles,
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 type Commit = {
   id: string;
@@ -425,80 +423,41 @@ export default function DashboardPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 hover:opacity-80"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-teal">
-              <img src="/icon1.png" alt="" className="h-4 w-4" />
-            </div>
-            <span className="text-sm font-medium text-zinc-800">
-              CommitHyper
+      <Header
+        left={
+          <>
+            <div className="h-4 w-px bg-mist" />
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              リポジトリ一覧
+            </Link>
+            <div className="h-4 w-px bg-mist" />
+            <span className="text-sm font-medium text-zinc-600">
+              {owner}/{name}
             </span>
-          </Link>
-          <div className="h-4 w-px bg-zinc-200" />
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            リポジトリ一覧
-          </Link>
-          <div className="h-4 w-px bg-zinc-200" />
-          <span className="text-sm font-medium text-zinc-600">
-            {owner}/{name}
-          </span>
-          {branches.length > 0 && (
-            <>
-              <div className="h-4 w-px bg-zinc-200" />
-              <select
-                value={selectedBranch}
-                onChange={(e) => handleBranchChange(e.target.value)}
-                className="max-w-[140px] truncate rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
-              >
-                {branches.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-          <div className="h-4 w-px bg-zinc-200" />
-          <Link
-            href="/guide"
-            className="text-xs text-zinc-400 hover:text-zinc-600"
-          >
-            ガイド
-          </Link>
-        </div>
-        <div className="flex items-center gap-3">
-          {progress && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 text-xs text-zinc-500 hover:text-midnight-ink">
-                  {progress.avatarUrl && (
-                    <img
-                      src={progress.avatarUrl}
-                      alt=""
-                      className="h-6 w-6 rounded-full"
-                    />
-                  )}
-                  {progress.name}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })} className="cursor-pointer gap-2">
-                  <LogOut className="h-4 w-4" />
-                  ログアウト
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </header>
+            {branches.length > 0 && (
+              <>
+                <div className="h-4 w-px bg-mist" />
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => handleBranchChange(e.target.value)}
+                  className="max-w-[140px] truncate rounded-lg border border-mist bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                >
+                  {branches.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </>
+        }
+        user={progress ? { name: progress.name, avatarUrl: progress.avatarUrl } : null}
+      />
 
       <div className="flex flex-1">
         <main className="flex-1 px-8 py-10">

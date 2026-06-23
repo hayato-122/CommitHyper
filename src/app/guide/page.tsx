@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import { Header } from "@/components/Header";
 import {
-  GitCommitHorizontal,
   Clipboard,
   Download,
   X,
@@ -247,30 +247,22 @@ export default function GuidePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-pearl">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center border-b border-mist bg-white px-6">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-2 transition-opacity hover:opacity-80"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-brand-teal">
-            <GitCommitHorizontal className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-body-sm font-semibold text-midnight-ink">
-            CommitHyper
-          </span>
-        </Link>
-        <div className="mx-4 h-4 w-px bg-mist" />
-        <button
-          onClick={() => window.history.back()}
-          className="flex items-center gap-1.5 text-body-sm text-zinc-500 transition-colors hover:text-midnight-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          戻る
-        </button>
-        <div className="mx-4 h-4 w-px bg-mist" />
-        <span className="text-body-sm text-zinc-500">ガイド</span>
-      </header>
+      <Header
+        left={
+          <>
+            <div className="h-4 w-px bg-mist" />
+            <button
+              onClick={() => window.history.back()}
+              className="flex items-center gap-1.5 text-body-sm text-zinc-500 transition-colors hover:text-midnight-ink"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              戻る
+            </button>
+            <div className="h-4 w-px bg-mist" />
+            <span className="text-body-sm text-zinc-500">ガイド</span>
+          </>
+        }
+      />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
         {/* ===== Hero ===== */}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import { Header } from "@/components/Header";
 import { ArrowLeft } from "lucide-react";
 
 type EvalData = {
@@ -151,29 +152,33 @@ export default function ImprovePage() {
 
   return (
     <div className="flex h-screen flex-col bg-pearl">
-      {/* ===== Top Bar ===== */}
-      <header className="flex h-12 shrink-0 items-center gap-4 border-b border-mist bg-white px-6">
-        <button
-          onClick={() => router.push(`/dashboard/${owner}/${name}`)}
-          className="flex items-center gap-1.5 text-body-sm text-zinc-500 transition-colors hover:text-midnight-ink"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          ダッシュボードに戻る
-        </button>
-        <div className="h-4 w-px bg-mist" />
-        <span className="text-body-sm text-zinc-500">
-          {commit.sha.slice(0, 7)} · {commit.authorName}
-        </span>
-        <div className="h-4 w-px bg-mist" />
-        <a
-          href={`https://github.com/${owner}/${name}/commit/${commit.sha}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-body-sm font-medium text-brand-teal transition-opacity hover:opacity-80"
-        >
-          GitHubで見る ↗
-        </a>
-      </header>
+      <Header
+        left={
+          <>
+            <div className="h-4 w-px bg-mist" />
+            <button
+              onClick={() => router.push(`/dashboard/${owner}/${name}`)}
+              className="flex items-center gap-1.5 text-body-sm text-zinc-500 transition-colors hover:text-midnight-ink"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              ダッシュボードに戻る
+            </button>
+            <div className="h-4 w-px bg-mist" />
+            <span className="text-body-sm text-zinc-500">
+              {commit.sha.slice(0, 7)} · {commit.authorName}
+            </span>
+            <div className="h-4 w-px bg-mist" />
+            <a
+              href={`https://github.com/${owner}/${name}/commit/${commit.sha}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-body-sm font-medium text-brand-teal transition-opacity hover:opacity-80"
+            >
+              GitHubで見る ↗
+            </a>
+          </>
+        }
+      />
 
       {/* ===== Body ===== */}
       <div className="flex flex-1 overflow-hidden">

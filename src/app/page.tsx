@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { middlewareAuth } from "@/auth.config";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
@@ -15,7 +16,16 @@ export default async function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-pearl">
-      <Header landing />
+      <Header
+        right={
+          <Link
+            href="/login"
+            className="rounded-xl bg-brand-teal px-5 py-2 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+          >
+            ログイン
+          </Link>
+        }
+      />
       <main className="flex-1">
         <HeroSection />
         <FeaturesSection />
