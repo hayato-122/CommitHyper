@@ -67,7 +67,7 @@ export function Pager({ page, totalPages, totalCount, onPageChange }: PagerProps
       </button>
 
       {/* Range info */}
-      <span className="ml-4 w-28 text-xs tabular-nums text-zinc-400">
+      <span className="ml-4 hidden md:inline w-28 text-xs tabular-nums text-zinc-400">
         {start}〜{end} / 全{totalCount}件
       </span>
     </div>

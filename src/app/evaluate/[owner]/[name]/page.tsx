@@ -146,18 +146,18 @@ export default function EvaluatePage() {
             <div className="h-4 w-px bg-mist" />
             <Link href="/" className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600">
               <ArrowLeft className="h-3 w-3" />
-              トップに戻る
+              <span className="hidden md:inline">トップに戻る</span>
             </Link>
-            <div className="h-4 w-px bg-mist" />
-            <span className="text-sm font-medium text-zinc-600">
+            <div className="hidden md:block h-4 w-px bg-mist" />
+            <span className="text-sm font-medium text-zinc-600 truncate max-w-[120px] md:max-w-none">
               {owner}/{name}
             </span>
           </>
         }
       />
 
-      <div className="flex flex-1">
-        <main className="flex-1 px-8 py-10">
+      <div className="flex flex-1 flex-col md:flex-row">
+        <main className="flex-1 px-6 md:px-8 py-10">
           <div className="mb-8">
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-midnight-ink">
               {owner}/{name}
@@ -167,7 +167,7 @@ export default function EvaluatePage() {
             </p>
           </div>
 
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-2">
             <div className="flex overflow-hidden rounded-lg border border-zinc-300">
               <button
                 onClick={() => { setTab("candidates"); setPage(1); }}
@@ -257,7 +257,7 @@ export default function EvaluatePage() {
           )}
         </main>
 
-        <aside className="w-72 shrink-0 border-l border-zinc-200 bg-zinc-50 p-5">
+        <aside className="w-full md:w-72 md:shrink-0 border-t md:border-t-0 md:border-l border-zinc-200 bg-zinc-50 p-5">
           <div className="rounded-xl border border-zinc-200 bg-white p-5">
             <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
               リポジトリ品質

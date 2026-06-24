@@ -6,7 +6,7 @@ import { ScrollReveal } from "@/components/ScrollReveal";
 import { Header } from "@/components/Header";
 import { DiffViewer } from "@/components/DiffViewer";
 import { EvaluationCard } from "@/components/EvaluationCard";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 
 type AspectScores = {
   format: number;
@@ -66,6 +66,7 @@ export default function ImprovePage() {
   // GitHub反映ガイドパネル表示
   const [showApplyGuide, setShowApplyGuide] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,10 +178,10 @@ export default function ImprovePage() {
               className="flex items-center gap-1.5 text-body-sm text-zinc-500 transition-colors hover:text-midnight-ink"
             >
               <ArrowLeft className="h-4 w-4" />
-              ダッシュボードに戻る
+              <span className="hidden md:inline">ダッシュボードに戻る</span>
             </button>
-            <div className="h-4 w-px bg-mist" />
-            <span className="text-body-sm text-zinc-500">
+            <div className="hidden md:block h-4 w-px bg-mist" />
+            <span className="text-body-sm text-zinc-500 truncate max-w-[100px] md:max-w-none">
               {commit.sha.slice(0, 7)} · {commit.authorName}
             </span>
             <div className="h-4 w-px bg-mist" />
@@ -197,18 +198,31 @@ export default function ImprovePage() {
       />
 
       {/* ===== Body ===== */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         {/* ===== Left: Diff ===== */}
-        <div className="flex w-1/2 flex-col border-r border-mist bg-white">
-          <div className="flex h-10 shrink-0 items-center border-b border-mist px-5">
-            <span className="text-caption font-medium text-zinc-500">diff</span>
+        <div className="flex md:w-1/2 flex-col border-b md:border-b-0 md:border-r border-mist bg-white">
+          <button
+            onClick={() => setShowDiff(!showDiff)}
+            className="flex h-10 shrink-0 items-center gap-2 border-b border-mist px-5 text-caption font-medium text-zinc-500 hover:bg-pearl md:cursor-default md:hover:bg-transparent"
+          >
+            <span>diff</span>
+            <span className="md:hidden ml-auto flex items-center gap-1">
+              <span className="text-[11px] text-zinc-400">{showDiff ? "非表示" : "表示"}</span>
+              {showDiff ? <EyeOff className="h-3.5 w-3.5 text-zinc-400" /> : <Eye className="h-3.5 w-3.5 text-zinc-400" />}
+            </span>
+          </button>
+          <div className={`${showDiff ? "flex" : "hidden"} md:flex flex-1`}>
+            {diff ? <DiffViewer diff={diff} /> : (
+              <div className="flex flex-1 items-center justify-center">
+                <p className="text-caption text-zinc-400">diffを読み込めませんでした</p>
+              </div>
+            )}
           </div>
-          <DiffViewer diff={diff} />
         </div>
 
         {/* ===== Right: Reference + Input ===== */}
-        <div className="flex w-1/2 flex-col bg-pearl">
-          <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex w-full md:w-1/2 flex-col bg-pearl min-h-0">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6">
             {/* Original Message Card */}
             <ScrollReveal>
               <div className="mb-6 rounded-2xl border border-mist bg-white p-5">
@@ -379,7 +393,7 @@ export default function ImprovePage() {
 
           {/* Input area — 反映済みなら非表示 */}
           {!result?.applied && (
-            <div className="shrink-0 border-t border-mist bg-white p-6">
+            <div className="shrink-0 border-t border-mist bg-white p-4 md:p-6">
               <textarea
                 value={improvedMessage}
                 onChange={(e) => setImprovedMessage(e.target.value)}

@@ -457,19 +457,19 @@ export default function DashboardPage() {
               className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600"
             >
               <ArrowLeft className="h-3 w-3" />
-              リポジトリ一覧
+              <span className="hidden md:inline">リポジトリ一覧</span>
             </Link>
-            <div className="h-4 w-px bg-mist" />
-            <span className="text-sm font-medium text-zinc-600">
+            <div className="hidden md:block h-4 w-px bg-mist" />
+            <span className="text-sm font-medium text-zinc-600 truncate max-w-[100px] md:max-w-none">
               {owner}/{name}
             </span>
             {branches.length > 0 && (
               <>
-                <div className="h-4 w-px bg-mist" />
+                <div className="hidden md:block h-4 w-px bg-mist" />
                 <select
                   value={selectedBranch}
                   onChange={(e) => handleBranchChange(e.target.value)}
-                  className="max-w-[140px] truncate rounded-lg border border-mist bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                  className="max-w-[80px] md:max-w-[140px] truncate rounded-lg border border-mist bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
                 >
                   {branches.map((b) => (
                     <option key={b} value={b}>
@@ -484,8 +484,8 @@ export default function DashboardPage() {
         user={progress ? { name: progress.name, avatarUrl: progress.avatarUrl } : null}
       />
 
-      <div className="flex flex-1">
-        <main className="flex flex-1 flex-col px-8 py-10">
+      <div className="flex flex-1 flex-col md:flex-row">
+        <main className="flex flex-1 flex-col px-6 md:px-8 py-10">
           <div className="mb-8">
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-midnight-ink">
               {owner}/{name}
@@ -495,7 +495,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-2">
             <div className="flex overflow-hidden rounded-lg border border-zinc-300">
               <button
                 onClick={() => onTabChange("candidates")}
@@ -609,7 +609,7 @@ export default function DashboardPage() {
           )}
         </main>
 
-        <aside className="w-72 shrink-0 border-l border-zinc-200 bg-zinc-50 p-5">
+        <aside className="w-full md:w-72 md:shrink-0 border-t md:border-t-0 md:border-l border-zinc-200 bg-zinc-50 p-5">
           {progress && (
             <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-5">
               <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">

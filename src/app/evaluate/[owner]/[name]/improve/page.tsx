@@ -113,8 +113,8 @@ function ImproveContent() {
               <ArrowLeft className="h-4 w-4" />
               評価結果に戻る
             </button>
-            <div className="h-4 w-px bg-mist" />
-            <span className="text-body-sm text-zinc-500">
+            <div className="hidden md:block h-4 w-px bg-mist" />
+            <span className="text-body-sm text-zinc-500 truncate max-w-[80px] md:max-w-none">
               {sha.slice(0, 7)}
             </span>
             <div className="h-4 w-px bg-mist" />
@@ -130,9 +130,9 @@ function ImproveContent() {
         }
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         {/* Left: Diff */}
-        <div className="flex w-1/2 flex-col border-r border-mist bg-white">
+        <div className="flex w-full md:w-1/2 flex-col border-b md:border-b-0 md:border-r border-mist bg-white">
           <div className="flex h-10 shrink-0 items-center border-b border-mist px-5">
             <span className="text-caption font-medium text-zinc-500">diff</span>
           </div>
@@ -140,8 +140,8 @@ function ImproveContent() {
         </div>
 
         {/* Right: Reference + Input */}
-        <div className="flex w-1/2 flex-col bg-pearl">
-          <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex w-full md:w-1/2 flex-col bg-pearl min-h-0">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6">
             {/* Original Message Card */}
             <ScrollReveal>
               <div className="mb-6 rounded-3xl border border-mist bg-white p-5 shadow-subtle">
