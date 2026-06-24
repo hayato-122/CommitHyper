@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
+import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
 type GitHubCommit = {
@@ -180,7 +180,7 @@ export async function GET(
         for (let i = 0; i < githubCommits.length; i++) {
           const c = githubCommits[i];
           const evalResult = evaluateCommit(c.commit.message);
-          const status = evalResult.score >= 70 ? "excellent" : "pending";
+          const status = evalResult.score >= SCORE.GOOD ? "excellent" : "pending";
 
           const commit = await prisma.commit.create({
             data: {

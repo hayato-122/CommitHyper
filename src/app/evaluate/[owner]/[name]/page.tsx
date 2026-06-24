@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { CommitCard } from "@/components/CommitCard";
 import { Pager } from "@/components/Pager";
+import { SCORE } from "@/lib/evaluateCommit";
 import { ArrowLeft, ArrowUpDown } from "lucide-react";
 
 type EvalCommit = {
@@ -70,7 +71,7 @@ export default function EvaluatePage() {
   }
 
   function getCandidatePage() {
-    const filtered = allCommits.filter((c) => c.score < 70);
+    const filtered = allCommits.filter((c) => c.score < SCORE.GOOD);
     const sorted = sortCommits(filtered);
     const perPage = 3;
     const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
@@ -83,8 +84,8 @@ export default function EvaluatePage() {
   const currentAvg = totalCommits > 0
     ? Math.round(allCommits.reduce((s, c) => s + c.score, 0) / totalCommits)
     : 0;
-  const needsImprovement = allCommits.filter((c) => c.score < 70).length;
-  const excellentCount = allCommits.filter((c) => c.score >= 70).length;
+  const needsImprovement = allCommits.filter((c) => c.score < SCORE.GOOD).length;
+  const excellentCount = allCommits.filter((c) => c.score >= SCORE.GOOD).length;
 
   if (loading) {
     return (

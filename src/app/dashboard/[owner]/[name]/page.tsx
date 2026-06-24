@@ -7,6 +7,7 @@ import { ScrollReveal } from "@/components/ScrollReveal";
 import { Header } from "@/components/Header";
 import { CommitCard } from "@/components/CommitCard";
 import { Pager } from "@/components/Pager";
+import { SCORE } from "@/lib/evaluateCommit";
 import {
   ArrowLeft,
   RotateCw,
@@ -263,7 +264,7 @@ export default function DashboardPage() {
 
   function getCandidatePage() {
     const filtered = allCommits.filter(
-      (c) => c.status === "pending" && c.currentScore < 70,
+      (c) => c.status === "pending" && c.currentScore < SCORE.GOOD,
     );
     const sorted = sortCommits(filtered);
     const perPage = 3;

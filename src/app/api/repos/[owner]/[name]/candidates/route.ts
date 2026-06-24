@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { SCORE } from "@/lib/evaluateCommit";
 import { Prisma } from "@prisma/client";
 
 export async function GET(
@@ -29,7 +30,7 @@ export async function GET(
   const where = {
     repositoryId: repository.id,
     status: "pending",
-    currentScore: { lt: 70 },
+    currentScore: { lt: SCORE.GOOD },
   };
 
   // orderBy を動的に構築

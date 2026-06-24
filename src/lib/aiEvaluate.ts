@@ -1,16 +1,18 @@
 /**
  * AIによるコミットメッセージ評価サービス
  * Gemini Flash API を利用して、観点3（具体性）と観点4（Why）を評価する
- * このスコアはルールベース評価（観点1,2,5,6=55点満点）と統合される
+ * このスコアはルールベース評価（観点1,2,5,6=65点満点）と統合される
  */
 
 export type AiEvaluationResult = {
-  /** 観点3 + 観点4 の合計点（0〜45点） */
+  /** 観点3 + 観点4 の合計点（0〜35点） */
   score: number;
-  /** 観点3: Summaryの具体性（0〜25点） */
+  /** 観点3: Summaryの具体性（0〜20点） */
   summaryScore: number;
-  /** 観点4: Why・背景の説明（0〜20点） */
+  /** 観点4: Why・背景の説明（0〜15点） */
   whyScore: number;
+  /** AIが提案する最適なscope（空文字なら現状維持） */
+  suggestedScope: string;
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
@@ -19,48 +21,59 @@ export type AiEvaluationResult = {
 const GEMINI_API_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
 
-const EVALUATION_PROMPT = `あなたはコミットメッセージ評価の専門家です。
-与えられたコミットメッセージを以下の2つの軸で採点し、JSON形式で返してください。
-
-## 評価軸
-
-### 観点3: Summaryの具体性（25点）
-コミットメッセージの1行目（summary）が「何を変更したか」を具体的に伝えているか評価してください。
-
-- **25点**: 変更した機能名・画面名・処理名など固有名詞を含み、何を変えたか明確に伝わる
-  - 例: \`authにGoogleログインを追加する\`、\`ダッシュボードのソート機能を修正する\`
-- **15点**: 大まかに何をしたかは伝わるが、固有名詞が足りずやや曖昧
-  - 例: \`機能を追加する\`、\`バグを修正する\`
-- **5点**: 変更内容が曖昧で、何を変えたか具体的にわからない
-  - 例: \`修正\`、\`更新\`、\`色々直した\`
-- **0点**: 変更内容が全く書かれていない、または1単語だけ
-
-### 観点4: Why・背景の説明（20点）
-「なぜこの変更が必要か」が伝わるか評価してください。**コミットのbody（2行目以降の文章）** も確認して判断すること。
-
-- **20点**: bodyに変更理由や背景が明確に説明されている
-  - 例: bodyに \`ログイン失敗時のエラーがユーザーに表示されないため\` など
-- **12点**: summaryに理由が含まれている、または変更が自明（初期化・セットアップ・typo修正など）
-  - 例: \`プロジェクトを初期化する\`（初期化は理由が自明）
-- **0点**: Whyが全く伝わらない
-
-## 採点基準
-- 厳しすぎず、Conventional Commits のベストプラクティスに従う
-- summaryだけで判断せず、body（空行以降）も読むこと
-- 初期化・セットアップ・typo修正・軽微なスタイル変更は「Whyが自明」として12点を許容する
-
-## 応答JSON形式（日本語で出力）
-{
-  "summaryScore": 数値（0〜25）,
-  "whyScore": 数値（0〜20）,
-  "issues": ["問題点1", "問題点2", ...],
-  "suggestions": ["改善提案1", "改善提案2", ...],
-  "exampleMessage": "改善後のコミットメッセージ例"
-}
-
-- issues は最大3つ、suggestions は最大3つに収める
-- exampleMessage は元のメッセージの意図を尊重しつつ、より良い形に改善したものを提示する
-- issues が空なら空配列 [] を返す`;
+const EVALUATION_PROMPT = [
+  "あなたはコミットメッセージ評価の専門家です。",
+  "与えられたコミットメッセージを以下の3つの軸で採点し、JSON形式で返してください。",
+  "",
+  "## 評価軸",
+  "",
+  "### 観点3: Summaryの具体性（20点）",
+  "コミットメッセージの1行目（summary）が「何を変更したか」を具体的に伝えているか評価してください。",
+  "",
+  "- **20点**: 変更した機能名・画面名・ファイル名・ライブラリ名など固有名詞を含み、何を変えたか明確に伝わる",
+  "- **10点**: 大まかに何をしたかは伝わるが、固有名詞が足りずやや曖昧",
+  "- **3点**: 変更内容が曖昧で、何を変えたか具体的にわからない",
+  "- **0点**: 変更内容が全く書かれていない、または1単語だけ",
+  "",
+  "### 観点4: Why・背景の説明（15点）",
+  "「なぜこの変更が必要か」が伝わるか評価してください。**コミットのbody（2行目以降の文章）** も確認すること。",
+  "",
+  "- **15点**: bodyに変更理由や背景が明確に説明されている（15文字以上）",
+  "- **10点**: summaryに理由が含まれている、または変更が自明（初期化・セットアップ・typo修正など）",
+  "- **3点**: 変更内容が具体的で最低限の意図は推測できる",
+  "- **0点**: Whyが全く伝わらない",
+  "",
+  "### 観点X: scopeの妥当性と提案（加点対象外・参考情報）",
+  "コミットメッセージのscopeが変更内容と一致しているか評価してください。",
+  "scopeの意味（auth=認証, ui=画面, api=バックエンド, db=データベース, deps=依存関係, config=設定, ci=CI/CD, docs=ドキュメント, test=テスト, perf=パフォーマンス, refactor=リファクタリング, build=ビルド）を考慮し、",
+  "summaryやbodyから読み取れる実際の変更内容と照らし合わせてください。",
+  "",
+  "- scopeが存在し、変更内容と完全に一致 → suggestedScopeは空文字 \"\"",
+  "- scopeが存在しない → suggestedScopeに最適なscopeを1つ提案",
+  "- scopeが変更内容と不一致（例: `feat(auth): fix login button` なら scopeはauthではなくuiが適切）→ suggestedScopeにより適切なscopeを提案",
+  "",
+  "## 採点基準",
+  "- 厳しすぎず、Conventional Commits のベストプラクティスに従う",
+  "- summaryだけで判断せず、body（空行以降）も読むこと",
+  "- bodyが空の場合はwhyScoreは0〜10の範囲に留める",
+  "- 初期化・セットアップ・typo修正・軽微なスタイル変更は「Whyが自明」として10点を許容する",
+  "- suggestedScopeは英単語1つ（auth, ui, api, db, deps, config, ci, docs, test, perf, build, refactor のいずれか）",
+  "",
+  "## 応答JSON形式（日本語で出力）",
+  "{",
+  '  "summaryScore": 数値（0〜20）,',
+  '  "whyScore": 数値（0〜15）,',
+  '  "suggestedScope": "最適なscope または 空文字",',
+  '  "issues": ["問題点1", "問題点2", ...],',
+  '  "suggestions": ["改善提案1", "改善提案2", ...],',
+  '  "exampleMessage": "改善後のコミットメッセージ例（suggestedScopeを反映）"',
+  "}",
+  "",
+  "- issues は最大3つ、suggestions は最大3つに収める",
+  "- exampleMessage は元のメッセージの意図を尊重しつつ、より良い形に改善したものを提示する",
+  "- issues が空なら空配列 [] を返す",
+  "- scopeが不要な場合は suggestedScope は空文字 \"\" を返す",
+].join("\n");
 
 /**
  * コミットメッセージの観点3（具体性）・観点4（Why）をAI（Gemini Flash）で評価する
@@ -85,7 +98,7 @@ export async function aiEvaluateCommit(
             parts: [
               { text: EVALUATION_PROMPT },
               {
-                text: `評価対象のコミットメッセージ:\`\`\`\n${message}\n\`\`\``,
+                text: `評価対象のコミットメッセージ:\n\`\`\`\n${message}\n\`\`\``,
               },
             ],
           },
@@ -113,7 +126,6 @@ export async function aiEvaluateCommit(
       return null;
     }
 
-    // JSON を抽出（コードブロックで囲まれている場合もある）
     const jsonStr = extractJson(text);
     if (!jsonStr) {
       console.error(
@@ -125,25 +137,32 @@ export async function aiEvaluateCommit(
 
     const parsed = JSON.parse(jsonStr);
 
-    // --- バリデーション ---
-    const summaryScore = typeof parsed.summaryScore === "number" ? parsed.summaryScore : 0;
-    const whyScore = typeof parsed.whyScore === "number" ? parsed.whyScore : 0;
+    // バリデーション
+    const validSummaryScore = Math.max(0, Math.min(
+      20,
+      typeof parsed.summaryScore === "number" ? parsed.summaryScore : 0,
+    ));
+    const validWhyScore = Math.max(0, Math.min(
+      15,
+      typeof parsed.whyScore === "number" ? parsed.whyScore : 0,
+    ));
 
-    // スコア範囲をクランプ
-    const validSummaryScore = Math.max(0, Math.min(25, summaryScore));
-    const validWhyScore = Math.max(0, Math.min(20, whyScore));
-
-    const score = validSummaryScore + validWhyScore;
+    const suggestedScope = typeof parsed.suggestedScope === "string"
+      ? parsed.suggestedScope.trim()
+      : "";
 
     return {
-      score,
+      score: validSummaryScore + validWhyScore,
       summaryScore: validSummaryScore,
       whyScore: validWhyScore,
+      suggestedScope,
       issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 3) : [],
       suggestions: Array.isArray(parsed.suggestions)
         ? parsed.suggestions.slice(0, 3)
         : [],
-      exampleMessage: typeof parsed.exampleMessage === "string" ? parsed.exampleMessage : message,
+      exampleMessage: typeof parsed.exampleMessage === "string"
+        ? parsed.exampleMessage
+        : message,
     };
   } catch (error) {
     console.error("[aiEvaluate] Failed to evaluate commit:", error);
@@ -151,18 +170,12 @@ export async function aiEvaluateCommit(
   }
 }
 
-/**
- * レスポンステキストからJSON部分を抽出する
- * コードブロック ```json ... ``` や生JSONに対応
- */
 function extractJson(text: string): string | null {
-  // コードブロック形式 ```json ... ``` を試す
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   if (codeBlockMatch) {
     return codeBlockMatch[1].trim();
   }
 
-  // 生JSON形式を試す（最初の { から最後の } まで）
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     return jsonMatch[0];

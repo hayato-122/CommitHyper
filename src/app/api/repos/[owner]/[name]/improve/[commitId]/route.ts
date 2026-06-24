@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
+import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
 export async function GET(
@@ -71,7 +71,7 @@ export async function POST(
     issues: combined.issues,
     suggestions: combined.suggestions,
     exampleMessage: combined.exampleMessage,
-    passed: combined.score >= 70,
+    passed: combined.score >= SCORE.GOOD,
     xpGained: 0,
     pendingApply: true,
   });
@@ -116,7 +116,7 @@ export async function PUT(
       afterMessage: improvedMessage,
       beforeScore: commit.currentScore,
       afterScore: combined.score,
-      passed: combined.score >= 70,
+      passed: combined.score >= SCORE.GOOD,
       xpGained: 0,
     },
   });
@@ -132,18 +132,18 @@ export async function PUT(
   let xpGained = 0;
 
   // 合格（70点以上）→ XP付与 + status更新
-  if (combined.score >= 70) {
+  if (combined.score >= SCORE.GOOD) {
     await prisma.commit.update({
       where: { id: commit.id },
       data: { status: "improved" },
     });
 
-    xpGained = combined.score >= 90 ? 15 : 10;
+    xpGained = combined.score >= SCORE.EXCELLENT ? 15 : 10;
 
     await prisma.xpEvent.create({
       data: {
         userId: session.user.id,
-        type: combined.score >= 90 ? "improvement_excellent" : "improvement_passed",
+        type: combined.score >= SCORE.EXCELLENT ? "improvement_excellent" : "improvement_passed",
         amount: xpGained,
         reason: `コミット改善に合格（${combined.score}点）`,
         relatedCommitId: commit.id,
@@ -157,7 +157,7 @@ export async function PUT(
   }
 
   // 不合格だが50点以上 → 努力XPを微量付与
-  if (combined.score >= 50 && combined.score < 70) {
+  if (combined.score >= SCORE.NEEDS_IMPROVEMENT && combined.score < SCORE.GOOD) {
     xpGained = 3;
     await prisma.xpEvent.create({
       data: {
@@ -189,7 +189,7 @@ export async function PUT(
   return Response.json({
     score: combined.score,
     rank: combined.rank,
-    passed: combined.score >= 70,
+    passed: combined.score >= SCORE.GOOD,
     xpGained,
     user,
     applied: true,

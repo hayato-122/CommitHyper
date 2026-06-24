@@ -1,4 +1,4 @@
-import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
+import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
 export async function POST(request: Request) {
@@ -19,6 +19,6 @@ export async function POST(request: Request) {
     issues: combined.issues,
     suggestions: combined.suggestions,
     exampleMessage: combined.exampleMessage,
-    passed: combined.score >= 70,
+    passed: combined.score >= SCORE.GOOD,
   });
 }

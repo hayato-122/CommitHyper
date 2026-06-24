@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { SCORE } from "@/lib/evaluateCommit";
 
 type CommitCardProps = {
   sha: string;
@@ -49,7 +50,7 @@ export function CommitCard({
         <div className="flex flex-col items-end justify-between gap-2">
           <span
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              score < 70
+              score < SCORE.GOOD
                 ? "bg-red-100 text-red-700"
                 : "bg-emerald-100 text-emerald-700"
             }`}
