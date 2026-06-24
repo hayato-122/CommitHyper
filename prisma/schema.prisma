@@ -131,6 +131,7 @@ model CommitEvaluation {
   issues        Json     @default("[]")
   suggestions   Json     @default("[]")
   exampleMessage String  @db.Text
+  aspectScores  Json     @default("{}")
   evaluatedAt   DateTime @default(now())
 
   commit Commit @relation(fields: [commitId], references: [id], onDelete: Cascade)

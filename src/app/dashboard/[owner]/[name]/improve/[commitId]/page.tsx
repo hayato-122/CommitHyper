@@ -8,12 +8,22 @@ import { DiffViewer } from "@/components/DiffViewer";
 import { EvaluationCard } from "@/components/EvaluationCard";
 import { ArrowLeft } from "lucide-react";
 
+type AspectScores = {
+  format: number;
+  type: number;
+  summary: number;
+  why: number;
+  readability: number;
+  traceability: number;
+};
+
 type EvalData = {
   score: number;
   rank: string;
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
+  aspectScores?: AspectScores;
 };
 
 type CommitData = {
@@ -105,6 +115,7 @@ export default function ImprovePage() {
       issues: data.issues,
       suggestions: data.suggestions,
       exampleMessage: data.exampleMessage,
+      aspectScores: data.aspectScores,
     });
     setHasReevaluated(true);
     setShowApplyGuide(false);
@@ -224,6 +235,7 @@ export default function ImprovePage() {
                   suggestions={activeEval.suggestions}
                   exampleMessage={activeEval.exampleMessage}
                   label={hasReevaluated ? "評価結果（再評価）" : "評価結果"}
+                  aspectScores={activeEval.aspectScores}
                 />
                 {/* GitHub反映ボタン（再評価後のみ） */}
                 {hasReevaluated && (

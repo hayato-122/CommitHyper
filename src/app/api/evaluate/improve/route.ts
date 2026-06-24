@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     issues: combined.issues,
     suggestions: combined.suggestions,
     exampleMessage: combined.exampleMessage,
+    aspectScores: combined.aspectScores,
     passed: combined.score >= SCORE.GOOD,
   });
 }

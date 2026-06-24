@@ -15,6 +15,15 @@ import {
   Sparkles,
 } from "lucide-react";
 
+type AspectScores = {
+  format: number;
+  type: number;
+  summary: number;
+  why: number;
+  readability: number;
+  traceability: number;
+};
+
 type Commit = {
   id: string;
   sha: string;
@@ -25,6 +34,7 @@ type Commit = {
   currentScore: number;
   status: string;
   firstIssue?: string | null;
+  aspectScores?: AspectScores | null;
   exampleMessage?: string | null;
 };
 

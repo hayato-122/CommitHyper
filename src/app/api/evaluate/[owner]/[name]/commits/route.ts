@@ -12,6 +12,7 @@ type EvaluatedCommit = {
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
+  aspectScores: Record<string, number>;
 };
 
 export async function GET(
@@ -51,6 +52,7 @@ export async function GET(
         issues: combined.issues,
         suggestions: combined.suggestions,
         exampleMessage: combined.exampleMessage,
+        aspectScores: combined.aspectScores,
       });
     }
 

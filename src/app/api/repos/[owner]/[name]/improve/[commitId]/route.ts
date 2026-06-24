@@ -24,12 +24,19 @@ export async function GET(
     return Response.json({ error: "Evaluation not found" }, { status: 404 });
   }
 
+  // 既存データにaspectScoresがない場合はルールベースで計算して補完
+  let aspectScores = evaluation.aspectScores as Record<string, number> | null;
+  if (!aspectScores || Object.values(aspectScores).every(v => v === 0)) {
+    aspectScores = evaluateCommit(evaluation.targetMessage).aspectScores;
+  }
+
   return Response.json({
     score: evaluation.score,
     rank: evaluation.rank,
     issues: JSON.parse(evaluation.issues as string) as string[],
     suggestions: JSON.parse(evaluation.suggestions as string) as string[],
     exampleMessage: evaluation.exampleMessage,
+    aspectScores,
   });
 }
 
@@ -71,6 +78,7 @@ export async function POST(
     issues: combined.issues,
     suggestions: combined.suggestions,
     exampleMessage: combined.exampleMessage,
+    aspectScores: combined.aspectScores,
     passed: combined.score >= SCORE.GOOD,
     xpGained: 0,
     pendingApply: true,

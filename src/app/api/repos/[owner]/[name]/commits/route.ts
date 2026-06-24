@@ -139,6 +139,7 @@ export async function GET(
           ? (JSON.parse(c.evaluations[0].issues) as string[])[0] ?? null
           : null,
         exampleMessage: c.evaluations?.[0]?.exampleMessage ?? null,
+        aspectScores: c.evaluations?.[0]?.aspectScores ?? null,
       })),
     );
   }
@@ -206,6 +207,7 @@ export async function GET(
               issues: JSON.stringify(evalResult.issues),
               suggestions: JSON.stringify(evalResult.suggestions),
               exampleMessage: evalResult.exampleMessage,
+              aspectScores: evalResult.aspectScores,
             },
           });
 
@@ -274,6 +276,7 @@ export async function GET(
                 issues: JSON.stringify(combined.issues),
                 suggestions: JSON.stringify(combined.suggestions),
                 exampleMessage: combined.exampleMessage,
+                aspectScores: combined.aspectScores,
               },
             });
 

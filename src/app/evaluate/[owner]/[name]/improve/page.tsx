@@ -8,6 +8,15 @@ import { DiffViewer } from "@/components/DiffViewer";
 import { EvaluationCard } from "@/components/EvaluationCard";
 import { ArrowLeft, Check, Clipboard } from "lucide-react";
 
+type AspectScores = {
+  format: number;
+  type: number;
+  summary: number;
+  why: number;
+  readability: number;
+  traceability: number;
+};
+
 type EvalData = {
   score: number;
   rank: string;
@@ -15,6 +24,7 @@ type EvalData = {
   suggestions: string[];
   exampleMessage: string;
   passed?: boolean;
+  aspectScores?: AspectScores;
 };
 
 function ImproveContent() {
@@ -160,6 +170,7 @@ function ImproveContent() {
                   exampleMessage={activeEval.exampleMessage}
                   label="再評価結果"
                   passed={activeEval.passed}
+                  aspectScores={activeEval.aspectScores}
                 />
               </ScrollReveal>
             )}

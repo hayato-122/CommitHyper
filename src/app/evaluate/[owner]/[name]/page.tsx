@@ -10,6 +10,15 @@ import { Pager } from "@/components/Pager";
 import { SCORE } from "@/lib/evaluateCommit";
 import { ArrowLeft, ArrowUpDown } from "lucide-react";
 
+type AspectScores = {
+  format: number;
+  type: number;
+  summary: number;
+  why: number;
+  readability: number;
+  traceability: number;
+};
+
 type EvalCommit = {
   sha: string;
   message: string;
@@ -20,6 +29,7 @@ type EvalCommit = {
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
+  aspectScores?: AspectScores;
 };
 
 export default function EvaluatePage() {
