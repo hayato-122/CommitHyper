@@ -64,6 +64,7 @@ export default function ImprovePage() {
         fetch(`/api/repos/${owner}/${name}/commits`),
         fetch(`/api/repos/${owner}/${name}/improve/${commitId}`),
       ]);
+      if (cancelled) return;
       const commitsData = await commitsRes.json();
       const found = (Array.isArray(commitsData) ? commitsData : []).find(
         (c: CommitData) => c.id === commitId
@@ -72,13 +73,15 @@ export default function ImprovePage() {
         const diffRes = await fetch(
           `/api/repos/${owner}/${name}/commits/${found.sha}/diff`
         );
-        if (diffRes.ok) setDiff(await diffRes.text());
+        if (diffRes.ok && !cancelled) setDiff(await diffRes.text());
       }
+      if (cancelled) return;
       setCommit(found ?? null);
       if (evalRes.ok) setActiveEval(await evalRes.json());
       setLoading(false);
     }
     load();
+    return () => { cancelled = true; };
   }, [owner, name, commitId]);
 
   // 再評価 — 評価のみ実行し、activeEvalを更新
@@ -222,7 +225,8 @@ export default function ImprovePage() {
                   exampleMessage={activeEval.exampleMessage}
                   label={hasReevaluated ? "評価結果（再評価）" : "評価結果"}
                 />
-                {/* GitHub反映ボタン（再評価後のみ・ガイド非表示時） */}
+                {/* GitHub反映ボタン（再評価後のみ） */}
+                {hasReevaluated && (
                 <div className="mt-4 border-t border-mist pt-4">
                   {!showApplyGuide ? (
                     <>
@@ -263,7 +267,7 @@ export default function ImprovePage() {
                           <li className="list-decimal">
                             リポジトリのディレクトリで以下を実行：
                             <code className="mx-1 rounded bg-pearl px-1.5 py-0.5 font-mono text-caption text-midnight-ink">
-                              git commit --amend -m "新しいメッセージ"
+                              {`git commit --amend -m "新しいメッセージ"`}
                             </code>
                           </li>
                           <li className="list-decimal">
@@ -308,6 +312,7 @@ export default function ImprovePage() {
                     </>
                   )}
                 </div>
+                )}
               </ScrollReveal>
             )}
 
