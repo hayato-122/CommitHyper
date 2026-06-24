@@ -262,6 +262,14 @@ export default function GuidePage() {
             <span className="text-body-sm text-zinc-500">ガイド</span>
           </>
         }
+        right={
+          <Link
+            href="/login"
+            className="rounded-xl bg-brand-teal px-5 py-2 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+          >
+            ログイン
+          </Link>
+        }
       />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
