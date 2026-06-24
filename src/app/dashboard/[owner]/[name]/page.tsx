@@ -73,7 +73,11 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState("default");
+  const branchKey = `branch:${owner}/${name}`;
+  const [selectedBranch, setSelectedBranch] = useState(() => {
+    if (typeof window === "undefined") return "default";
+    return localStorage.getItem(branchKey) || "default";
+  });
   const [sortBy, setSortBy] = useState<"score" | "date">("score");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
@@ -213,9 +217,11 @@ export default function DashboardPage() {
         fetch("/api/user/progress"),
       ]);
 
+      let branchesData: string[] = [];
       if (branchesRes.ok) {
         const data = await branchesRes.json();
         if (Array.isArray(data) && data.length > 0) {
+          branchesData = data;
           setBranches(data);
           setSelectedBranch(data[0]);
         }
@@ -238,8 +244,9 @@ export default function DashboardPage() {
         await loadAllCommits();
         setLoading(false);
       } else {
-        // 初回 → SSEで分析
-        startAnalysis();
+        // 初回 → SSEで分析（取得したブランチがあれば指定）
+        const initialBranch = Array.isArray(branchesData) && branchesData.length > 0 ? branchesData[0] : undefined;
+        startAnalysis(initialBranch);
       }
     }
     init();
@@ -285,6 +292,7 @@ export default function DashboardPage() {
 
   async function handleBranchChange(branch: string) {
     setSelectedBranch(branch);
+    localStorage.setItem(branchKey, branch);
     setPage(1);
     setLoading(true);
     await loadAllCommits(true, branch);
