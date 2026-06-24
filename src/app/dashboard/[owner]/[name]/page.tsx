@@ -302,87 +302,93 @@ export default function DashboardPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-pearl px-6">
         <div className="w-full max-w-lg">
-          {/* タイトル */}
-          <div className="mb-8 text-center">
-            <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand-teal">
-              <Sparkles className="h-6 w-6 text-white" />
+          {/* Title */}
+          <div className="mb-10 text-center">
+            <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-teal">
+              <Sparkles className="h-7 w-7 text-white" />
             </div>
-            <h1 className="text-xl font-semibold text-midnight-ink">
+            <h1
+              className="text-heading font-semibold text-midnight-ink"
+              style={{ fontFamily: "var(--font-dm-sans), var(--font-noto-sans-jp), sans-serif" }}
+            >
               {owner}/{name}
             </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              {analyzeState.message}
+            <p className="mt-2 text-body text-zinc-500">
+              コミットを分析しています
             </p>
           </div>
 
-          {/* プログレスバー（AIフェーズのみ表示） */}
-          {isAiPhase && total > 0 && (
-            <div className="mb-6">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-medium text-zinc-700">
-                  AI評価 {current}/{total}
-                </span>
-                <span className="text-zinc-500">{percent}%</span>
-              </div>
-              <div className="h-3 overflow-hidden rounded-full bg-mist">
-                <div
-                  className="h-full rounded-full bg-brand-teal transition-all duration-500"
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-              {/* 推定残り時間 */}
-              {estimatedSec > 0 && (
-                <p className="mt-2 text-xs text-zinc-400">
-                  残り約 {estimatedMin} 分（1件あたり約1.5秒）
-                </p>
-              )}
+          {/* Progress bar */}
+          <div className="mb-8">
+            <div className="mb-2 flex items-center justify-between text-body-sm">
+              <span className="font-medium text-zinc-700">
+                {isAiPhase ? `AI評価 ${current}/${total}` : "準備中..."}
+              </span>
+              {isAiPhase && <span className="text-zinc-500">{percent}%</span>}
             </div>
-          )}
-
-          {/* 現在評価中のコミット */}
-          {isAiPhase && analyzeState.currentMessage && (
-            <div className="rounded-xl border border-mist bg-white p-4">
-              <p className="mb-1 text-xs font-medium text-zinc-400">
-                現在評価中
+            <div className="h-2.5 overflow-hidden rounded-full bg-mist">
+              <div
+                className="h-full rounded-full bg-brand-teal transition-all duration-500"
+                style={{ width: `${isAiPhase ? percent : 10}%` }}
+              />
+            </div>
+            {isAiPhase && estimatedSec > 0 && (
+              <p className="mt-2 text-caption text-zinc-400">
+                残り約 {estimatedMin} 分
               </p>
-              <p className="font-mono text-sm leading-relaxed text-midnight-ink break-all line-clamp-2">
+            )}
+          </div>
+
+          {/* Phase checklist */}
+          <div className="mb-6 space-y-2">
+            {/* Phase 1: Fetch */}
+            <div className="flex items-center gap-3 rounded-xl border border-mist bg-white px-4 py-3">
+              {analyzeState.phase === "fetch" ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
+              ) : (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-teal text-[10px] text-white">✓</span>
+              )}
+              <span className={`text-body-sm ${analyzeState.phase === "fetch" ? "text-midnight-ink font-medium" : "text-zinc-500"}`}>
+                GitHubからコミットを取得
+                {analyzeState.phase !== "fetch" && `（${total}件）`}
+              </span>
+            </div>
+            {/* Phase 2: Rule */}
+            <div className="flex items-center gap-3 rounded-xl border border-mist bg-white px-4 py-3">
+              {analyzeState.phase === "fetch" ? (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[10px] text-zinc-400">—</span>
+              ) : analyzeState.phase === "rule" ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
+              ) : (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-teal text-[10px] text-white">✓</span>
+              )}
+              <span className={`text-body-sm ${analyzeState.phase === "rule" ? "text-midnight-ink font-medium" : analyzeState.phase === "fetch" ? "text-zinc-400" : "text-zinc-500"}`}>
+                ルールベース評価
+                {analyzeState.initialAvg != null && `（平均 ${analyzeState.initialAvg}点）`}
+              </span>
+            </div>
+            {/* Phase 3: AI */}
+            <div className="flex items-center gap-3 rounded-xl border border-brand-teal/20 bg-white px-4 py-3">
+              {isAiPhase ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
+              ) : (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[10px] text-zinc-400">—</span>
+              )}
+              <span className={`text-body-sm ${isAiPhase ? "text-midnight-ink font-medium" : "text-zinc-400"}`}>
+                AI評価{isAiPhase ? ` ${current}/${total}` : ""}
+              </span>
+            </div>
+          </div>
+
+          {/* Current commit being evaluated */}
+          {isAiPhase && analyzeState.currentMessage && (
+            <div className="rounded-2xl border border-mist bg-white p-4">
+              <p className="mb-1 text-caption font-medium text-zinc-400">評価中</p>
+              <p className="font-mono text-body-sm leading-relaxed text-midnight-ink break-all line-clamp-2">
                 {analyzeState.currentMessage}
               </p>
-              {analyzeState.score !== undefined && (
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-xs text-zinc-400">スコア:</span>
-                  <span className="rounded-full bg-leaf-soft/20 px-2 py-0.5 text-xs font-semibold text-leaf-soft">
-                    {analyzeState.score}/100
-                  </span>
-                </div>
-              )}
             </div>
           )}
-
-          {/* フェーズ表示（AI以外） */}
-          {!isAiPhase && (
-            <div className="rounded-xl border border-mist bg-white p-6 text-center">
-              {analyzeState.phase === "fetch" && (
-                <div className="flex items-center justify-center gap-2">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
-                  <span className="text-sm text-zinc-600">コミットを取得しています...</span>
-                </div>
-              )}
-              {analyzeState.phase === "rule" && (
-                <div className="flex items-center justify-center gap-2">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
-                  <span className="text-sm text-zinc-600">ルール評価中...</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* フッター */}
-          <p className="mt-8 text-center text-xs text-zinc-400">
-            初回分析は全コミットに対してルール評価＋AI評価を行います。
-            <br />
-            ページを閉じてもバックグラウンドで続行されます。
-          </p>
         </div>
       </div>
     );
