@@ -485,7 +485,7 @@ export default function DashboardPage() {
       />
 
       <div className="flex flex-1">
-        <main className="flex-1 px-8 py-10">
+        <main className="flex flex-1 flex-col px-8 py-10">
           <div className="mb-8">
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-midnight-ink">
               {owner}/{name}
@@ -554,38 +554,40 @@ export default function DashboardPage() {
           </div>
 
           {tab === "candidates" && (
-            <div className="space-y-4">
-              {candidateCommits.length === 0 ? (
-                <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
-                  <p className="text-lg font-medium text-zinc-700">
-                    改善候補はありません
-                  </p>
-                  <p className="mt-2 text-sm text-zinc-500">
-                    すべてのコミットメッセージが高評価です。
-                  </p>
-                </div>
-              ) : (
-                candidateCommits.map((commit) => (
-                  <ScrollReveal key={commit.id}>
-                    <CommitCard
-                      sha={commit.sha}
-                      message={commit.message}
-                      authorName={commit.authorName}
-                      committedAt={commit.committedAt}
-                      score={commit.currentScore}
-                      firstIssue={commit.firstIssue}
-                      improveHref={`/dashboard/${owner}/${name}/improve/${commit.id}`}
-                    />
-                  </ScrollReveal>
-                ))
-              )}
+            <>
+              <div className="flex-1 space-y-4">
+                {candidateCommits.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
+                    <p className="text-lg font-medium text-zinc-700">
+                      改善候補はありません
+                    </p>
+                    <p className="mt-2 text-sm text-zinc-500">
+                      すべてのコミットメッセージが高評価です。
+                    </p>
+                  </div>
+                ) : (
+                  candidateCommits.map((commit) => (
+                    <ScrollReveal key={commit.id}>
+                      <CommitCard
+                        sha={commit.sha}
+                        message={commit.message}
+                        authorName={commit.authorName}
+                        committedAt={commit.committedAt}
+                        score={commit.currentScore}
+                        firstIssue={commit.firstIssue}
+                        improveHref={`/dashboard/${owner}/${name}/improve/${commit.id}`}
+                      />
+                    </ScrollReveal>
+                  ))
+                )}
+              </div>
               <Pager
                 page={page}
                 totalPages={totalPages}
                 totalCount={totalCount}
                 onPageChange={setPage}
               />
-            </div>
+            </>
           )}
 
           {tab === "all" && (

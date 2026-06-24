@@ -10,7 +10,7 @@ type PagerProps = {
 };
 
 export function Pager({ page, totalPages, totalCount, onPageChange }: PagerProps) {
-  if (totalPages <= 1) return null;
+  if (totalCount === 0) return null;
 
   const start = (page - 1) * 3 + 1;
   const end = Math.min(page * 3, totalCount);
@@ -43,9 +43,9 @@ export function Pager({ page, totalPages, totalCount, onPageChange }: PagerProps
       </button>
 
       {/* Page indicator */}
-      <span className="mx-3 text-sm font-medium text-zinc-600">
-        {String(page).padStart(2, "0")}{" "}
-        <span className="text-zinc-400">/</span>{" "}
+      <span className="mx-3 w-12 text-center text-sm font-medium tabular-nums text-zinc-600">
+        {String(page).padStart(2, "0")}
+        <span className="text-zinc-400"> / </span>
         {String(totalPages).padStart(2, "0")}
       </span>
 
@@ -67,7 +67,7 @@ export function Pager({ page, totalPages, totalCount, onPageChange }: PagerProps
       </button>
 
       {/* Range info */}
-      <span className="ml-4 text-xs text-zinc-400">
+      <span className="ml-4 w-28 text-xs tabular-nums text-zinc-400">
         {start}〜{end} / 全{totalCount}件
       </span>
     </div>
