@@ -39,8 +39,8 @@ export async function GET(
 
     for (const c of githubCommits) {
       const ruleResult = evaluateCommit(c.commit.message);
-      // ルール評価で良好(80点以上)ならAI評価をスキップ
-      const aiResult = ruleResult.score >= SCORE.GOOD
+      // ルールで100点ならAI評価不要
+      const aiResult = ruleResult.score >= 100
         ? null
         : await aiEvaluateCommit(c.commit.message);
       const combined = combineWithAi(ruleResult, aiResult);

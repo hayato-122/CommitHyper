@@ -254,9 +254,9 @@ export async function GET(
           if (isStreamCancelled) break;
 
           const sc = savedCommits[i];
-          const ruleResult = evaluateCommit(sc.message); // ルール再実行
-          // ルールで良好(80点以上)ならAI評価不要
-          const aiResult = ruleResult.score >= SCORE.GOOD
+          const ruleResult = evaluateCommit(sc.message);
+          // ルールで100点ならAI評価不要
+          const aiResult = ruleResult.score >= 100
             ? null
             : await aiEvaluateCommit(sc.message);
 
