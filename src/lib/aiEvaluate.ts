@@ -16,7 +16,16 @@ export type AiEvaluationResult = {
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
+  /** AI評価がスキップされた理由（null=正常） */
+  skipped?: null;
 };
+
+/** AI評価が利用できなかった理由 */
+export type AiSkippedReason =
+  | { reason: "no_key" }
+  | { reason: "rate_limited"; retryAfterSeconds: number }
+  | { reason: "error"; message: string }
+  | { reason: "quota_exceeded" };
 
 const GEMINI_API_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
