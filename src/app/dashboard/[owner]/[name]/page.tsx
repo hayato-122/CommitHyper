@@ -8,11 +8,13 @@ import { Header } from "@/components/Header";
 import { CommitCard } from "@/components/CommitCard";
 import { Pager } from "@/components/Pager";
 import { SCORE } from "@/lib/evaluateCommit";
+import { exportMarkdown, downloadFile, type ExportCommit } from "@/lib/export";
 import {
   ArrowLeft,
   RotateCw,
   ArrowUpDown,
   Sparkles,
+  Download,
 } from "lucide-react";
 
 type AspectScores = {
@@ -83,6 +85,23 @@ export default function DashboardPage() {
 
   // SSE分析状態
   const [analyzeState, setAnalyzeState] = useState<AnalyzeState | null>(null);
+
+  function handleExportMd() {
+    const ownerName = `${owner}/${name}`;
+    const commits: ExportCommit[] = allCommits.map((c) => ({
+      sha: c.sha,
+      message: c.message,
+      authorName: c.authorName,
+      committedAt: c.committedAt,
+      score: c.currentScore,
+      initialScore: c.initialScore,
+      status: c.status,
+      firstIssue: c.firstIssue,
+      aspectScores: c.aspectScores ?? null,
+    }));
+    const md = exportMarkdown(commits, ownerName);
+    downloadFile(md, `${owner}-${name}-commits.md`);
+  }
   const evtSourceRef = useRef<EventSource | null>(null);
 
   const loadAllCommits = useCallback(
@@ -539,6 +558,13 @@ export default function DashboardPage() {
               >
                 <ArrowUpDown className="mr-1 inline h-3 w-3" />
                 {sortOrder === "asc" ? "昇順" : "降順"}
+              </button>
+              <button
+                onClick={handleExportMd}
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Markdownで保存
               </button>
               <button
                 onClick={handleRefresh}
