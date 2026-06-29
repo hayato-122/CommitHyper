@@ -51,13 +51,24 @@ export function Header({ left, right, user }: HeaderProps) {
     if (!trimmed) return;
 
     const urlMatch = trimmed.match(/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);
+    const userUrlMatch = trimmed.match(/github\.com\/([\w.-]+)\/?$/);
     const plainMatch = trimmed.match(/^([\w.-]+)\/([\w.-]+)$/);
-    const match = urlMatch || plainMatch;
-    if (!match) return;
+    const plainUserMatch = trimmed.match(/^@?([\w.-]+)$/);
+
+    if (urlMatch) {
+      router.push(`/evaluate/${urlMatch[1]}/${urlMatch[2]}`);
+    } else if (userUrlMatch) {
+      router.push(`/evaluate/users/${userUrlMatch[1]}`);
+    } else if (plainMatch) {
+      router.push(`/evaluate/${plainMatch[1]}/${plainMatch[2]}`);
+    } else if (plainUserMatch) {
+      router.push(`/evaluate/users/${plainUserMatch[1]}`);
+    } else {
+      return;
+    }
 
     setSearchOpen(false);
     setSearchInput("");
-    router.push(`/evaluate/${match[1]}/${match[2]}`);
   }
 
   return (

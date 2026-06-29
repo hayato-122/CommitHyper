@@ -19,15 +19,23 @@ export function QuickEvaluateForm() {
 
     // owner/name または GitHub URL をパース
     const urlMatch = trimmed.match(/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);
+    const userUrlMatch = trimmed.match(/github\.com\/([\w.-]+)\/?$/);
     const plainMatch = trimmed.match(/^([\w.-]+)\/([\w.-]+)$/);
-    const match = urlMatch || plainMatch;
-    if (!match) {
-      setError("owner/name または GitHub URL で入力してください（例: facebook/react）");
-      return;
-    }
+    const plainUserMatch = trimmed.match(/^@?([\w.-]+)$/);
 
     setError("");
-    router.push(`/evaluate/${match[1]}/${match[2]}`);
+
+    if (urlMatch) {
+      router.push(`/evaluate/${urlMatch[1]}/${urlMatch[2]}`);
+    } else if (userUrlMatch) {
+      router.push(`/evaluate/users/${userUrlMatch[1]}`);
+    } else if (plainMatch) {
+      router.push(`/evaluate/${plainMatch[1]}/${plainMatch[2]}`);
+    } else if (plainUserMatch) {
+      router.push(`/evaluate/users/${plainUserMatch[1]}`);
+    } else {
+      setError("owner/repo、ユーザー名、または GitHub URL で入力してください");
+    }
   }
 
   return (
