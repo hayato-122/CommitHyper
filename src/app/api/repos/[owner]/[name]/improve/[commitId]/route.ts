@@ -5,7 +5,9 @@ import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
+  {
+    params,
+  }: { params: Promise<{ owner: string; name: string; commitId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -26,7 +28,7 @@ export async function GET(
 
   // 既存データにaspectScoresがない場合はルールベースで計算して補完
   let aspectScores = evaluation.aspectScores as Record<string, number> | null;
-  if (!aspectScores || Object.values(aspectScores).every(v => v === 0)) {
+  if (!aspectScores || Object.values(aspectScores).every((v) => v === 0)) {
     aspectScores = evaluateCommit(evaluation.targetMessage).aspectScores;
   }
 
@@ -43,7 +45,9 @@ export async function GET(
 // POST: 再評価（改善メッセージの評価のみ、DB保存はしない）
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
+  {
+    params,
+  }: { params: Promise<{ owner: string; name: string; commitId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -89,7 +93,9 @@ export async function POST(
 // PUT: 改善メッセージをDBに反映し、XPを付与する（「修正完了」ボタン用）
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ owner: string; name: string; commitId: string }> }
+  {
+    params,
+  }: { params: Promise<{ owner: string; name: string; commitId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -152,7 +158,10 @@ export async function PUT(
     await prisma.xpEvent.create({
       data: {
         userId: session.user.id,
-        type: combined.score >= SCORE.EXCELLENT ? "improvement_excellent" : "improvement_passed",
+        type:
+          combined.score >= SCORE.EXCELLENT
+            ? "improvement_excellent"
+            : "improvement_passed",
         amount: xpGained,
         reason: `コミット改善に合格（${combined.score}点）`,
         relatedCommitId: commit.id,
@@ -166,7 +175,10 @@ export async function PUT(
   }
 
   // 不合格だが50点以上 → 努力XPを微量付与
-  if (combined.score >= SCORE.NEEDS_IMPROVEMENT && combined.score < SCORE.GOOD) {
+  if (
+    combined.score >= SCORE.NEEDS_IMPROVEMENT &&
+    combined.score < SCORE.GOOD
+  ) {
     xpGained = 3;
     await prisma.xpEvent.create({
       data: {

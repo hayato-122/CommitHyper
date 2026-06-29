@@ -15,6 +15,26 @@ type EvaluatedCommit = {
   aspectScores: Record<string, number>;
 };
 
+// 簡易メモリキャッシュ（TTL: 30分）
+const cache = new Map<string, { data: EvaluatedCommit[]; expiry: number }>();
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+function getCached(key: string): EvaluatedCommit[] | null {
+  const entry = cache.get(key);
+  if (entry && Date.now() < entry.expiry) return entry.data;
+  cache.delete(key);
+  return null;
+}
+
+function setCache(key: string, data: EvaluatedCommit[]) {
+  cache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
+  // メモリリーク防止: 100件を超えたら古い順に削除
+  if (cache.size > 100) {
+    const oldest = cache.keys().next().value;
+    if (oldest) cache.delete(oldest);
+  }
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ owner: string; name: string }> },
@@ -30,8 +50,18 @@ export async function GET(
   const { owner, name } = await params;
   const url = new URL(request.url);
   const branch = url.searchParams.get("branch") || undefined;
+  const refresh = url.searchParams.get("refresh") === "true";
   const limitParam = url.searchParams.get("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : 200;
+
+  // キャッシュキー
+  const cacheKey = `${owner}/${name}/${branch || "default"}`;
+
+  // キャッシュがあれば（かつrefreshでなければ）返す
+  if (!refresh) {
+    const cached = getCached(cacheKey);
+    if (cached) return Response.json(cached);
+  }
 
   try {
     const githubCommits = await fetchAllCommits(owner, name, token, branch, limit);
@@ -58,6 +88,9 @@ export async function GET(
         aspectScores: combined.aspectScores,
       });
     }
+
+    // キャッシュに保存
+    setCache(cacheKey, results);
 
     return Response.json(results);
   } catch (error) {
