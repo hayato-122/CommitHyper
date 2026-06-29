@@ -25,6 +25,7 @@ type EvalData = {
   exampleMessage: string;
   passed?: boolean;
   aspectScores?: AspectScores;
+  aiAvailable?: boolean;
 };
 
 function ImproveContent() {
@@ -43,6 +44,14 @@ function ImproveContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{ available: boolean; message?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/ai-status")
+      .then((r) => r.json())
+      .then((d) => setAiStatus(d))
+      .catch(() => setAiStatus({ available: false, message: "AI状態の取得に失敗" }));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +151,13 @@ function ImproveContent() {
         {/* Right: Reference + Input */}
         <div className="flex w-full md:w-1/2 flex-col bg-pearl min-h-0">
           <div className="flex-1 overflow-y-auto p-4 md:p-6">
+            {/* AI status badge */}
+            {aiStatus && !aiStatus.available && (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-caption text-amber-700">
+                {aiStatus.message || "AI評価が利用できません。ルールベースの評価のみ表示されます。"}
+              </div>
+            )}
+
             {/* Original Message Card */}
             <ScrollReveal>
               <div className="mb-6 rounded-3xl border border-mist bg-white p-5 shadow-subtle">
@@ -171,6 +187,7 @@ function ImproveContent() {
                   label="再評価結果"
                   passed={activeEval.passed}
                   aspectScores={activeEval.aspectScores}
+                  aiAvailable={activeEval.aiAvailable}
                 />
               </ScrollReveal>
             )}

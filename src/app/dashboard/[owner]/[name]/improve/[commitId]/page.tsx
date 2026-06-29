@@ -24,6 +24,7 @@ type EvalData = {
   suggestions: string[];
   exampleMessage: string;
   aspectScores?: AspectScores;
+  aiAvailable?: boolean;
 };
 
 type CommitData = {
@@ -67,6 +68,14 @@ export default function ImprovePage() {
   const [showApplyGuide, setShowApplyGuide] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{ available: boolean; message?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/ai-status")
+      .then((r) => r.json())
+      .then((d) => setAiStatus(d))
+      .catch(() => setAiStatus({ available: false, message: "AI状態の取得に失敗" }));
+  }, []);
   const [ratio, setRatio] = useState(0.5);
   const [vertRatio, setVertRatio] = useState(0.65);
   const splitRef = useRef<HTMLDivElement | null>(null);
@@ -295,6 +304,13 @@ export default function ImprovePage() {
         {/* Right */}
         <div ref={vertSplitRef} className="flex flex-1 flex-col overflow-hidden min-w-0 bg-pearl">
           <div className="overflow-y-auto p-4 md:p-6" style={{ height: `${vertRatio * 100}%` }}>
+            {/* AI status badge */}
+            {aiStatus && !aiStatus.available && (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-caption text-amber-700">
+                {aiStatus.message || "AI評価が利用できません。ルールベースの評価のみ表示されます。"}
+              </div>
+            )}
+
             {/* Original Message Card */}
             <ScrollReveal>
               <div className="mb-6 rounded-2xl border border-mist bg-white p-5">
@@ -321,6 +337,7 @@ export default function ImprovePage() {
                   suggestions={activeEval.suggestions}
                   exampleMessage={activeEval.exampleMessage}
                   label={hasReevaluated ? "評価結果（再評価）" : "評価結果"}
+                  aiAvailable={activeEval.aiAvailable}
                   aspectScores={activeEval.aspectScores}
                 />
                 {/* GitHub反映ボタン（再評価後のみ） */}
