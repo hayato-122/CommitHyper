@@ -304,7 +304,15 @@ export default function DashboardPage() {
     );
     const sorted = sortCommits(filtered);
     const perPage = 3;
-    const totalPages = Math.ceil(sorted.length / perPage);
+    const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
+    const commits = sorted.slice((page - 1) * perPage, page * perPage);
+    return { commits, totalPages, totalCount: sorted.length };
+  }
+
+  function getAllPage() {
+    const sorted = sortCommits(allCommits);
+    const perPage = 20;
+    const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
     const commits = sorted.slice((page - 1) * perPage, page * perPage);
     return { commits, totalPages, totalCount: sorted.length };
   }
@@ -445,6 +453,7 @@ export default function DashboardPage() {
     totalPages,
     totalCount,
   } = getCandidatePage();
+  const allPage = getAllPage();
   const totalCommits = allCommits.length;
   const initialAvg =
     totalCommits > 0
@@ -617,21 +626,35 @@ export default function DashboardPage() {
           )}
 
           {tab === "all" && (
-            <div className="space-y-3">
-              {sortCommits(allCommits).map((commit) => (
-                <ScrollReveal key={commit.id}>
-                  <CommitCard
-                    sha={commit.sha}
-                    message={commit.message}
-                    authorName={commit.authorName}
-                    committedAt={commit.committedAt}
-                    score={commit.currentScore}
-                    improveHref={`/dashboard/${owner}/${name}/improve/${commit.id}`}
-                    density="compact"
-                  />
-                </ScrollReveal>
-              ))}
-            </div>
+            <>
+              <div className="flex-1 space-y-3">
+                {allCommits.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
+                    <p className="text-lg font-medium text-zinc-700">コミットがありません</p>
+                  </div>
+                ) : (
+                  allPage.commits.map((commit) => (
+                    <ScrollReveal key={commit.id}>
+                      <CommitCard
+                        sha={commit.sha}
+                        message={commit.message}
+                        authorName={commit.authorName}
+                        committedAt={commit.committedAt}
+                        score={commit.currentScore}
+                        improveHref={`/dashboard/${owner}/${name}/improve/${commit.id}`}
+                        density="compact"
+                      />
+                    </ScrollReveal>
+                  ))
+                )}
+              </div>
+              <Pager
+                page={page}
+                totalPages={allPage.totalPages}
+                totalCount={allPage.totalCount}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </main>
 
