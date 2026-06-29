@@ -52,7 +52,7 @@ export function EvaluationCard({
         </span>
       </div>
 
-      {/* Mini score strip */}
+      {/* Mini score strip (always visible, visual only) */}
       {aspectScores && Object.values(aspectScores).some(v => v > 0) && (
         <div className="mb-4 flex items-center gap-1">
           {BARS.map((bar) => {
@@ -109,32 +109,38 @@ export function EvaluationCard({
         <p className="font-mono text-body-sm leading-relaxed text-midnight-ink break-words whitespace-pre-wrap">{exampleMessage}</p>
       </div>
 
-      {/* Detail breakdown (click bottom area to toggle) */}
+      {/* Score breakdown toggle */}
       {aspectScores && Object.values(aspectScores).some(v => v > 0) && (
-        <div className="mt-3 cursor-pointer border-t border-mist pt-3" onClick={() => setShowDetails(!showDetails)}>
+        <>
           {!showDetails ? (
-            <div className="flex items-center justify-center gap-1">
-              <span className="text-[11px] text-zinc-400">スコア内訳を表示</span>
-              <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
+            <div className="mt-3 flex cursor-pointer items-center justify-center gap-1 border-t border-mist pt-3 transition-opacity hover:opacity-70" onClick={() => setShowDetails(true)}>
+              <span className="text-caption font-medium text-zinc-500">スコア内訳を表示</span>
+              <ChevronDown className="h-4 w-4 text-zinc-400" />
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {BARS.map((bar) => {
-                const value = aspectScores[bar.key];
-                const pct = Math.round((value / bar.max) * 100);
-                return (
-                  <div key={bar.key} className="flex items-center gap-2">
-                    <span className="w-30 shrink-0 text-right text-[11px] text-zinc-500 whitespace-nowrap">{bar.label}</span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-mist">
-                      <div className={`h-full rounded-full ${barColor(pct)}`} style={{ width: `${pct}%` }} />
+            <div className="mt-3 border-t border-mist pt-3">
+              <div className="space-y-1.5">
+                {BARS.map((bar) => {
+                  const value = aspectScores[bar.key];
+                  const pct = Math.round((value / bar.max) * 100);
+                  return (
+                    <div key={bar.key} className="flex items-center gap-2">
+                      <span className="w-30 shrink-0 text-right text-[11px] text-zinc-500 whitespace-nowrap">{bar.label}</span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-mist">
+                        <div className={`h-full rounded-full ${barColor(pct)}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-10 text-right text-[11px] font-medium text-zinc-600">{value}/{bar.max}</span>
                     </div>
-                    <span className="w-10 text-right text-[11px] font-medium text-zinc-600">{value}/{bar.max}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex cursor-pointer items-center justify-center gap-1 transition-opacity hover:opacity-70" onClick={() => setShowDetails(false)}>
+                <span className="text-caption font-medium text-zinc-500">スコア内訳を閉じる</span>
+                <ChevronUp className="h-4 w-4 text-zinc-400" />
+              </div>
             </div>
           )}
-        </div>
+        </>
       )}
 
       {passed && (

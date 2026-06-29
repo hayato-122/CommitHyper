@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Header } from "@/components/Header";
 import { DiffViewer } from "@/components/DiffViewer";
 import { EvaluationCard } from "@/components/EvaluationCard";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, GripVertical } from "lucide-react";
 
 type AspectScores = {
   format: number;
@@ -67,6 +67,53 @@ export default function ImprovePage() {
   const [showApplyGuide, setShowApplyGuide] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [ratio, setRatio] = useState(0.5);
+  const [vertRatio, setVertRatio] = useState(0.65);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const vertSplitRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef(false);
+  const vertDragRef = useRef(false);
+
+  function handleSplitDragStart() {
+    dragRef.current = true;
+  }
+
+  function handleVertDragStart() {
+    vertDragRef.current = true;
+  }
+
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    function onMove(e: MouseEvent) {
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (dragRef.current && splitRef.current) {
+          const rect = splitRef.current.getBoundingClientRect();
+          setRatio(Math.max(0.2, Math.min(0.8, (e.clientX - rect.left) / rect.width)));
+        }
+        if (vertDragRef.current && vertSplitRef.current) {
+          const rect = vertSplitRef.current.getBoundingClientRect();
+          setVertRatio(Math.max(0.3, Math.min(0.85, (e.clientY - rect.top) / rect.height)));
+        }
+      });
+    }
+
+    function onUp() {
+      if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
+      dragRef.current = false;
+      vertDragRef.current = false;
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,20 +245,21 @@ export default function ImprovePage() {
       />
 
       {/* ===== Body ===== */}
-      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-        {/* ===== Left: Diff ===== */}
-        <div className="flex md:w-1/2 flex-col border-b md:border-b-0 md:border-r border-mist bg-white">
+      {/* Mobile: stacked layout  /  Desktop: SplitPane with drag */}
+      <div className="flex flex-1 flex-col overflow-hidden md:hidden">
+        {/* Mobile: Diff toggle */}
+        <div className="flex flex-col border-b border-mist bg-white">
           <button
             onClick={() => setShowDiff(!showDiff)}
-            className="flex h-10 shrink-0 items-center gap-2 border-b border-mist px-5 text-caption font-medium text-zinc-500 hover:bg-pearl md:cursor-default md:hover:bg-transparent"
+            className="flex h-10 shrink-0 items-center gap-2 border-b border-mist px-5 text-caption font-medium text-zinc-500 hover:bg-pearl"
           >
             <span>diff</span>
-            <span className="md:hidden ml-auto flex items-center gap-1">
+            <span className="ml-auto flex items-center gap-1">
               <span className="text-[11px] text-zinc-400">{showDiff ? "非表示" : "表示"}</span>
               {showDiff ? <EyeOff className="h-3.5 w-3.5 text-zinc-400" /> : <Eye className="h-3.5 w-3.5 text-zinc-400" />}
             </span>
           </button>
-          <div className={`${showDiff ? "flex" : "hidden"} md:flex flex-1`}>
+          <div className={`${showDiff ? "flex" : "hidden"} flex-1`}>
             {diff ? <DiffViewer diff={diff} /> : (
               <div className="flex flex-1 items-center justify-center">
                 <p className="text-caption text-zinc-400">diffを読み込めませんでした</p>
@@ -219,10 +267,34 @@ export default function ImprovePage() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* ===== Right: Reference + Input ===== */}
-        <div className="flex w-full md:w-1/2 flex-col bg-pearl min-h-0">
-          <div className="flex-1 overflow-y-auto p-4 md:p-6">
+      {/* Desktop: SplitPane with drag */}
+      <div ref={splitRef} className="hidden md:flex flex-1 overflow-hidden select-none">
+        {/* Left: Diff */}
+        <div className="flex flex-col overflow-hidden border-r border-mist bg-white" style={{ width: `${ratio * 100}%`, minWidth: "20%" }}>
+          <div className="flex h-10 shrink-0 items-center border-b border-mist px-5">
+            <span className="text-caption font-medium text-zinc-500">diff</span>
+          </div>
+          {diff ? <DiffViewer diff={diff} /> : (
+            <div className="flex flex-1 items-center justify-center">
+              <p className="text-caption text-zinc-400">diffを読み込めませんでした</p>
+            </div>
+          )}
+        </div>
+        {/* Divider */}
+        <div
+          className="flex shrink-0 cursor-col-resize items-center justify-center bg-transparent hover:bg-mist/50 transition-colors"
+          style={{ width: 12 }}
+          onMouseDown={(e) => { e.preventDefault(); handleSplitDragStart(); }}
+        >
+          <div className="flex h-10 items-center justify-center rounded-full bg-mist/80">
+            <GripVertical className="h-3.5 w-3.5 text-zinc-400" />
+          </div>
+        </div>
+        {/* Right */}
+        <div ref={vertSplitRef} className="flex flex-1 flex-col overflow-hidden min-w-0 bg-pearl">
+          <div className="overflow-y-auto p-4 md:p-6" style={{ height: `${vertRatio * 100}%` }}>
             {/* Original Message Card */}
             <ScrollReveal>
               <div className="mb-6 rounded-2xl border border-mist bg-white p-5">
@@ -391,17 +463,29 @@ export default function ImprovePage() {
             )}
           </div>
 
+          {/* Vertical divider */}
+          <div
+            className="shrink-0 cursor-row-resize bg-transparent hover:bg-mist/50 transition-colors flex items-center justify-center"
+            style={{ height: 8 }}
+            onMouseDown={(e) => { e.preventDefault(); handleVertDragStart(); }}
+          >
+            <div className="flex w-10 items-center justify-center rounded-full bg-mist/80">
+              <GripVertical className="h-3 w-3 text-zinc-400 rotate-90" />
+            </div>
+          </div>
+
           {/* Input area — 反映済みなら非表示 */}
           {!result?.applied && (
-            <div className="shrink-0 border-t border-mist bg-white p-4 md:p-6">
-              <textarea
-                value={improvedMessage}
-                onChange={(e) => setImprovedMessage(e.target.value)}
-                placeholder="新しいコミットメッセージを入力..."
-                rows={4}
-                className="w-full resize-none rounded-xl border border-mist bg-white px-4 py-3 font-mono text-body-sm text-midnight-ink placeholder:text-fog-gray focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20"
-              />
-              <div className="mt-4 flex items-center justify-between">
+            <div className="flex flex-1 flex-col overflow-hidden border-t border-mist bg-white">
+              <div className="flex-1 p-4 md:p-6 pb-2 flex flex-col">
+                <textarea
+                  value={improvedMessage}
+                  onChange={(e) => setImprovedMessage(e.target.value)}
+                  placeholder="新しいコミットメッセージを入力..."
+                  className="flex-1 resize-none rounded-xl border border-mist bg-white px-4 py-3 font-mono text-body-sm text-midnight-ink placeholder:text-fog-gray focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20 min-h-[60px]"
+                />
+              </div>
+              <div className="shrink-0 flex items-center justify-between px-4 md:px-6 pb-4 md:pb-6">
                 <span className="text-caption text-zinc-500">
                   type(scope): 「何を」「なぜ」変えたか具体的に
                 </span>
