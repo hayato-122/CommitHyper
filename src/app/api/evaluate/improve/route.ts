@@ -21,5 +21,6 @@ export async function POST(request: Request) {
     exampleMessage: combined.exampleMessage,
     aspectScores: combined.aspectScores,
     passed: combined.score >= SCORE.GOOD,
+    aiAvailable: !!aiResult,
   });
 }

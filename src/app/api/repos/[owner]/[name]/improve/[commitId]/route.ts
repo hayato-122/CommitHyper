@@ -82,6 +82,7 @@ export async function POST(
     passed: combined.score >= SCORE.GOOD,
     xpGained: 0,
     pendingApply: true,
+    aiAvailable: !!aiResult,
   });
 }
 
