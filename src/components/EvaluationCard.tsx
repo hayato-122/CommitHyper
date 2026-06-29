@@ -19,6 +19,7 @@ type EvaluationCardProps = {
   label?: string;
   passed?: boolean;
   aspectScores?: AspectScores;
+  aiAvailable?: boolean;
 };
 
 const BARS = [
@@ -38,7 +39,7 @@ function barColor(pct: number) {
 
 export function EvaluationCard({
   score, issues, suggestions, exampleMessage,
-  label = "評価結果", passed, aspectScores,
+  label = "評価結果", passed, aspectScores, aiAvailable,
 }: EvaluationCardProps) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -51,6 +52,13 @@ export function EvaluationCard({
           {score}<span className="text-body-sm font-normal text-zinc-500">/100</span>
         </span>
       </div>
+
+      {/* AI not available warning */}
+      {aiAvailable === false && (
+        <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-700">
+          AI評価なしの参考スコアです。「再評価する」でAIによる正確な評価を受けられます。
+        </div>
+      )}
 
       {/* Mini score strip (always visible, visual only) */}
       {aspectScores && Object.values(aspectScores).some(v => v > 0) && (
