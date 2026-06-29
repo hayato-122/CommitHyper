@@ -19,7 +19,7 @@ export type AiEvaluationResult = {
 };
 
 const GEMINI_API_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 const EVALUATION_PROMPT = [
   "あなたはコミットメッセージ評価の専門家です。",
@@ -59,6 +59,23 @@ const EVALUATION_PROMPT = [
   "- 初期化・セットアップ・typo修正・軽微なスタイル変更は「Whyが自明」として10点を許容する",
   "- suggestedScopeは英単語1つ（auth, ui, api, db, deps, config, ci, docs, test, perf, build, refactor のいずれか）",
   "",
+  "## exampleMessage 生成ルール（最重要）",
+  "exampleMessage は**実際に使える完全なコミットメッセージ**を出力すること。以下の形式に従うこと：",
+  "",
+  "```",
+  "type(scope): 変更内容の要約",
+  "",
+  "- 必要に応じて箇条書きで詳細",
+  "- なぜ変更したかを含めると尚良い",
+  "```",
+  "",
+  "- 1行目は `type(scope): summary` の形式を厳守すること",
+  "- body（空行以降の箇条書き）を含めても良い。複数ファイルに跨ぐ変更の場合はbodyを必須とする",
+  "- summaryは「〜する」または「〜した」で終え、10〜72文字に収める",
+  "- summaryには固有名詞（機能名・画面名・ライブラリ名）を含めて具体性を高める",
+  "- bodyでは `-` で各変更を箇条書きにし、変更理由を含めると良い",
+  "- 出力するのはコミットメッセージ**のみ**。説明や補足は不要",
+  "",
   "## 応答JSON形式（日本語で出力）",
   "{",
   '  "summaryScore": 数値（0〜20）,',
@@ -70,8 +87,7 @@ const EVALUATION_PROMPT = [
   "}",
   "",
   "- issues は最大3つ、suggestions は最大3つに収める",
-  "- exampleMessage は元のメッセージの意図を尊重しつつ、より良い形に改善したものを提示する",
-  "- issues が空なら空配列 [] を返す",
+  '- issues が空なら空配列 [] を返す',
   "- scopeが不要な場合は suggestedScope は空文字 \"\" を返す",
 ].join("\n");
 
@@ -89,9 +105,13 @@ export async function aiEvaluateCommit(
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(`${GEMINI_API_ENDPOINT}?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         contents: [
           {
@@ -109,6 +129,7 @@ export async function aiEvaluateCommit(
         },
       }),
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "unknown");

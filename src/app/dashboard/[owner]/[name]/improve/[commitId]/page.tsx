@@ -270,7 +270,7 @@ export default function ImprovePage() {
       </div>
 
       {/* Desktop: SplitPane with drag */}
-      <div ref={splitRef} className="hidden md:flex flex-1 overflow-hidden select-none">
+      <div ref={splitRef} className="hidden md:flex flex-1 overflow-hidden">
         {/* Left: Diff */}
         <div className="flex flex-col overflow-hidden border-r border-mist bg-white" style={{ width: `${ratio * 100}%`, minWidth: "20%" }}>
           <div className="flex h-10 shrink-0 items-center border-b border-mist px-5">

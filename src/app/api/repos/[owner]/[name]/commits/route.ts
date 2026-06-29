@@ -254,8 +254,11 @@ export async function GET(
           if (isStreamCancelled) break;
 
           const sc = savedCommits[i];
-          const ruleResult = evaluateCommit(sc.message); // ルール再実行（メモリ上の方が速い）
-          const aiResult = await aiEvaluateCommit(sc.message);
+          const ruleResult = evaluateCommit(sc.message); // ルール再実行
+          // ルールで良好(80点以上)ならAI評価不要
+          const aiResult = ruleResult.score >= SCORE.GOOD
+            ? null
+            : await aiEvaluateCommit(sc.message);
 
           if (aiResult) {
             const combined = combineWithAi(ruleResult, aiResult);

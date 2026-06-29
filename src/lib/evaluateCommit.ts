@@ -369,14 +369,23 @@ function containsSpecificInfo(summary: string): boolean {
 }
 
 function generateExample(type: string, scope: string, summary: string, original: string): string {
+  // 自動生成メッセージ（Merge branch等）の検出
+  if (/^merge/i.test(summary) && !type) {
+    return "feat(scope): developブランチの変更を統合する\n\n- チームメンバーの変更を取り込み\n- コンフリクトを解決";
+  }
+
   if (!type && !isJapanese(original)) {
     if (original.includes("修正") || original.includes("fix")) {
-      return "fix(auth): ログイン時のエラー処理を修正する";
+      return "fix(auth): ログイン時のエラー処理を修正する\n\n- 無効なトークンで401が返らない問題を修正\n- エラーメッセージをユーザーに表示";
     }
     if (original.includes("追加") || original.includes("add") || original.includes("feat")) {
-      return "feat(dashboard): リポジトリ切り替え機能を追加する";
+      return "feat(dashboard): リポジトリ切り替え機能を追加する\n\n- ヘッダーにドロップダウンセレクタを設置\n- 選択したリポジトリに遷移";
     }
-    return "feat(scope): 変更内容の要約をここに書く";
+    if (original.includes("削除") || original.includes("remove") || original.includes("delete") || original.includes("clean")) {
+      return "chore(deps): 使用していない依存関係を削除する\n\n- 不要になったlodashの参照を除去\n- package.jsonをクリーンアップ";
+    }
+    // 汎用フォールバック
+    return "feat(scope): 変更内容を具体的に記述する\n\n- 何を・なぜ変更したかを箇条書きで説明";
   }
 
   if (!type || !VALID_TYPES.includes(type)) {
@@ -400,41 +409,51 @@ function generateExample(type: string, scope: string, summary: string, original:
 }
 
 function generateExpandedExample(type: string, scope: string): string {
-  const templates: Record<string, string[]> = {
-    chore: [
-      `${type}(${scope}): ${scope}周りのプロジェクト設定を導入する`,
-      `${type}(${scope}): ${scope}の初期構成をセットアップする`,
-    ],
-    feat: [
-      `${type}(${scope}): ${scope}に〜機能を追加する`,
-      `${type}(${scope}): ${scope}の〜処理を実装する`,
-    ],
-    fix: [
-      `${type}(${scope}): ${scope}の〜エラーを修正する`,
-      `${type}(${scope}): ${scope}の〜問題を修正する`,
-    ],
-    refactor: [
-      `${type}(${scope}): ${scope}の〜処理をリファクタリングする`,
-    ],
-    docs: [
-      `${type}(${scope}): ${scope}のドキュメントを追加・更新する`,
-    ],
-    style: [
-      `${type}(${scope}): ${scope}のスタイルを調整する`,
-    ],
-    test: [
-      `${type}(${scope}): ${scope}のテストを追加する`,
-    ],
-    build: [
-      `${type}(${scope}): ${scope}のビルド設定を変更する`,
-    ],
-    ci: [
-      `${type}(${scope}): ${scope}のCI設定を変更する`,
-    ],
-    perf: [
-      `${type}(${scope}): ${scope}のパフォーマンスを改善する`,
-    ],
+  const templates: Record<string, string> = {
+    chore: `${type}(${scope}): ${scope}に〇〇の設定を追加する
+
+- Tailwind CSSのカスタムテーマを定義
+- 基本のカラーパレットとフォント設定を追加`,
+    feat: `${type}(${scope}): ${scope}に〇〇機能を追加する
+
+- 〇〇画面に××の入り口を設置
+- Auth.js v5でコールバック処理を実装
+- ログイン後はダッシュボードにリダイレクト`,
+    fix: `${type}(${scope}): ${scope}の××問題を修正する
+
+- GitHub APIが空配列を返した場合の500エラーを修正
+- 早期リターンで空配列をそのまま返すよう変更`,
+    refactor: `${type}(${scope}): ${scope}の〇〇処理を改善する
+
+- N+1問題を解消しレスポンス時間を1/3に改善
+- ループ内クエリをprismaのincludeで一度にJOIN`,
+    test: `${type}(${scope}): ${scope}の〇〇テストを追加する
+
+- ログイン処理の正常系・異常系テスト
+- エラーハンドリングのテストケース追加`,
+    docs: `${type}(${scope}): ${scope}のドキュメントを追加する
+
+- APIエンドポイント一覧とリクエスト形式
+- セットアップ手順をREADMEに追記`,
+    style: `${type}(${scope}): ${scope}のスタイルを調整する
+
+- ボタンのホバー色をブランドカラーに統一`,
+    build: `${type}(${scope}): ${scope}のビルド設定を変更する
+
+- 使用していない依存関係を削除
+- バンドルサイズを最適化`,
+    ci: `${type}(${scope}): ${scope}のCI設定を変更する
+
+- GitHub Actionsにlintチェックを追加
+- Nodeバージョンを20にアップデート`,
+    perf: `${type}(${scope}): ${scope}のパフォーマンスを改善する
+
+- 画像の遅延読み込みを導入
+- メモ化で不要な再レンダリングを防止`,
   };
+
+  return templates[type] || `${type}(${scope}): ${scope}に関する具体的な変更内容`;
+;
 
   const candidates = templates[type];
   if (candidates && candidates.length > 0) {

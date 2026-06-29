@@ -1,4 +1,4 @@
-import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
+import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 import { fetchAllCommits } from "@/lib/github";
 
@@ -39,7 +39,10 @@ export async function GET(
 
     for (const c of githubCommits) {
       const ruleResult = evaluateCommit(c.commit.message);
-      const aiResult = await aiEvaluateCommit(c.commit.message);
+      // ルール評価で良好(80点以上)ならAI評価をスキップ
+      const aiResult = ruleResult.score >= SCORE.GOOD
+        ? null
+        : await aiEvaluateCommit(c.commit.message);
       const combined = combineWithAi(ruleResult, aiResult);
 
       results.push({
