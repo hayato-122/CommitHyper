@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ScrollReveal } from "@/components/ScrollReveal";
-import { ArrowLeft } from "lucide-react";
+import { Header } from "@/components/Header";
+import { DiffViewer } from "@/components/DiffViewer";
+import { EvaluationCard } from "@/components/EvaluationCard";
+import { ArrowLeft, Eye, EyeOff, GripVertical } from "lucide-react";
 
-type OriginalEval = {
+type AspectScores = {
+  format: number;
+  type: number;
+  summary: number;
+  why: number;
+  readability: number;
+  traceability: number;
+};
+
+type EvalData = {
   score: number;
   rank: string;
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
+  aspectScores?: AspectScores;
+  aiAvailable?: boolean;
 };
 
 type CommitData = {
@@ -31,6 +45,9 @@ export default function ImprovePage() {
 
   const [commit, setCommit] = useState<CommitData | null>(null);
   const [improvedMessage, setImprovedMessage] = useState("");
+  // 表示中の評価データ（初回=元の評価, 再評価後=新しい結果に差し替え）
+  const [activeEval, setActiveEval] = useState<EvalData | null>(null);
+  // 再評価APIの結果（pendingApply, applied, xpGained等を含む）
   const [result, setResult] = useState<{
     score: number;
     issues: string[];
@@ -38,11 +55,74 @@ export default function ImprovePage() {
     exampleMessage: string;
     passed: boolean;
     xpGained: number;
+    pendingApply?: boolean;
+    applied?: boolean;
   } | null>(null);
-  const [originalEval, setOriginalEval] = useState<OriginalEval | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [applying, setApplying] = useState(false);
+  // 再評価済み（GitHub反映ボタン表示用）
+  const [hasReevaluated, setHasReevaluated] = useState(false);
+  // GitHub反映ガイドパネル表示
+  const [showApplyGuide, setShowApplyGuide] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{ available: boolean; message?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/ai-status")
+      .then((r) => r.json())
+      .then((d) => setAiStatus(d))
+      .catch(() => setAiStatus({ available: false, message: "AI状態の取得に失敗" }));
+  }, []);
+  const [ratio, setRatio] = useState(0.5);
+  const [vertRatio, setVertRatio] = useState(0.65);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const vertSplitRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef(false);
+  const vertDragRef = useRef(false);
+
+  function handleSplitDragStart() {
+    dragRef.current = true;
+  }
+
+  function handleVertDragStart() {
+    vertDragRef.current = true;
+  }
+
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    function onMove(e: MouseEvent) {
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (dragRef.current && splitRef.current) {
+          const rect = splitRef.current.getBoundingClientRect();
+          setRatio(Math.max(0.2, Math.min(0.8, (e.clientX - rect.left) / rect.width)));
+        }
+        if (vertDragRef.current && vertSplitRef.current) {
+          const rect = vertSplitRef.current.getBoundingClientRect();
+          setVertRatio(Math.max(0.3, Math.min(0.85, (e.clientY - rect.top) / rect.height)));
+        }
+      });
+    }
+
+    function onUp() {
+      if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
+      dragRef.current = false;
+      vertDragRef.current = false;
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +131,7 @@ export default function ImprovePage() {
         fetch(`/api/repos/${owner}/${name}/commits`),
         fetch(`/api/repos/${owner}/${name}/improve/${commitId}`),
       ]);
+      if (cancelled) return;
       const commitsData = await commitsRes.json();
       const found = (Array.isArray(commitsData) ? commitsData : []).find(
         (c: CommitData) => c.id === commitId
@@ -59,15 +140,18 @@ export default function ImprovePage() {
         const diffRes = await fetch(
           `/api/repos/${owner}/${name}/commits/${found.sha}/diff`
         );
-        if (diffRes.ok) setDiff(await diffRes.text());
+        if (diffRes.ok && !cancelled) setDiff(await diffRes.text());
       }
+      if (cancelled) return;
       setCommit(found ?? null);
-      if (evalRes.ok) setOriginalEval(await evalRes.json());
+      if (evalRes.ok) setActiveEval(await evalRes.json());
       setLoading(false);
     }
     load();
+    return () => { cancelled = true; };
   }, [owner, name, commitId]);
 
+  // 再評価 — 評価のみ実行し、activeEvalを更新
   async function handleReevaluate() {
     if (!improvedMessage.trim()) return;
     setSubmitting(true);
@@ -79,8 +163,49 @@ export default function ImprovePage() {
         body: JSON.stringify({ message: improvedMessage }),
       }
     );
-    setResult(await res.json());
+    const data = await res.json();
+    setResult({ ...data, applied: false });
+    // 評価結果カードの中身を差し替え
+    setActiveEval({
+      score: data.score,
+      rank: data.rank,
+      issues: data.issues,
+      suggestions: data.suggestions,
+      exampleMessage: data.exampleMessage,
+      aspectScores: data.aspectScores,
+    });
+    setHasReevaluated(true);
+    setShowApplyGuide(false);
     setSubmitting(false);
+  }
+
+  // GitHub反映ガイドパネルを開く
+  function handleApply() {
+    setShowApplyGuide(true);
+  }
+
+  // ガイドパネルで「修正完了」
+  async function handleConfirmApply() {
+    if (!improvedMessage.trim()) return;
+    setApplying(true);
+    const res = await fetch(
+      `/api/repos/${owner}/${name}/improve/${commitId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: improvedMessage }),
+      }
+    );
+    const data = await res.json();
+    setResult({ ...data, applied: true });
+    setShowApplyGuide(false);
+    setApplying(false);
+  }
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(improvedMessage);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   if (loading) {
@@ -100,113 +225,92 @@ export default function ImprovePage() {
 
   return (
     <div className="flex h-screen flex-col bg-pearl">
-      {/* ===== Top Bar ===== */}
-      <header className="flex h-12 shrink-0 items-center gap-4 border-b border-mist bg-white px-6">
-        <button
-          onClick={() => router.push(`/dashboard/${owner}/${name}`)}
-          className="flex items-center gap-1.5 text-body-sm text-zinc-500 transition-colors hover:text-midnight-ink"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          ダッシュボードに戻る
-        </button>
-        <div className="h-4 w-px bg-mist" />
-        <span className="text-body-sm text-zinc-500">
-          {commit.sha.slice(0, 7)} · {commit.authorName}
-        </span>
-        <div className="h-4 w-px bg-mist" />
-        <a
-          href={`https://github.com/${owner}/${name}/commit/${commit.sha}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-body-sm font-medium text-brand-teal transition-opacity hover:opacity-80"
-        >
-          GitHubで見る ↗
-        </a>
-      </header>
+      <Header
+        left={
+          <>
+            <div className="h-4 w-px bg-mist" />
+            <button
+              onClick={() => router.push(`/dashboard/${owner}/${name}`)}
+              className="flex items-center gap-1.5 text-body-sm text-zinc-500 transition-colors hover:text-midnight-ink"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden md:inline">ダッシュボードに戻る</span>
+            </button>
+            <div className="hidden md:block h-4 w-px bg-mist" />
+            <span className="text-body-sm text-zinc-500 truncate max-w-[100px] md:max-w-none">
+              {commit.sha.slice(0, 7)} · {commit.authorName}
+            </span>
+            <div className="h-4 w-px bg-mist" />
+            <a
+              href={`https://github.com/${owner}/${name}/commit/${commit.sha}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-body-sm font-medium text-brand-teal transition-opacity hover:opacity-80"
+            >
+              GitHubで見る ↗
+            </a>
+          </>
+        }
+      />
 
       {/* ===== Body ===== */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* ===== Left: Diff ===== */}
-        <div className="flex w-1/2 flex-col border-r border-mist bg-white">
+      {/* Mobile: stacked layout  /  Desktop: SplitPane with drag */}
+      <div className="flex flex-1 flex-col overflow-hidden md:hidden">
+        {/* Mobile: Diff toggle */}
+        <div className="flex flex-col border-b border-mist bg-white">
+          <button
+            onClick={() => setShowDiff(!showDiff)}
+            className="flex h-10 shrink-0 items-center gap-2 border-b border-mist px-5 text-caption font-medium text-zinc-500 hover:bg-pearl"
+          >
+            <span>diff</span>
+            <span className="ml-auto flex items-center gap-1">
+              <span className="text-[11px] text-zinc-400">{showDiff ? "非表示" : "表示"}</span>
+              {showDiff ? <EyeOff className="h-3.5 w-3.5 text-zinc-400" /> : <Eye className="h-3.5 w-3.5 text-zinc-400" />}
+            </span>
+          </button>
+          <div className={`${showDiff ? "flex" : "hidden"} flex-1`}>
+            {diff ? <DiffViewer diff={diff} /> : (
+              <div className="flex flex-1 items-center justify-center">
+                <p className="text-caption text-zinc-400">diffを読み込めませんでした</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop: SplitPane with drag */}
+      <div ref={splitRef} className="hidden md:flex flex-1 overflow-hidden">
+        {/* Left: Diff */}
+        <div className="flex flex-col overflow-hidden border-r border-mist bg-white" style={{ width: `${ratio * 100}%`, minWidth: "20%" }}>
           <div className="flex h-10 shrink-0 items-center border-b border-mist px-5">
             <span className="text-caption font-medium text-zinc-500">diff</span>
           </div>
-          {diff ? (
-            <div className="flex-1 overflow-auto font-mono text-caption leading-relaxed">
-              {diff.split("\n").map((line, i) => {
-                if (line.startsWith("+") && !line.startsWith("+++")) {
-                  return (
-                    <div key={i} className="flex">
-                      <span className="w-10 shrink-0 select-none bg-green-50 text-right pr-3 text-[10px] leading-5 text-green-400">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 bg-green-50 px-3 text-green-800 break-all">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                if (line.startsWith("-") && !line.startsWith("---")) {
-                  return (
-                    <div key={i} className="flex">
-                      <span className="w-10 shrink-0 select-none bg-red-50 text-right pr-3 text-[10px] leading-5 text-red-400">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 bg-red-50 px-3 text-red-800 break-all">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                if (line.startsWith("@@")) {
-                  return (
-                    <div key={i} className="flex">
-                      <span className="w-10 shrink-0 select-none bg-blue-50 text-right pr-3 text-[10px] leading-5 text-blue-300">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 bg-blue-50 px-3 text-blue-600 font-semibold">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                if (
-                  line.startsWith("diff --git") ||
-                  line.startsWith("---") ||
-                  line.startsWith("+++")
-                ) {
-                  return (
-                    <div key={i} className="flex bg-pearl/50">
-                      <span className="w-10 shrink-0 select-none text-right pr-3 text-[10px] leading-5 text-zinc-300">
-                        {i + 1}
-                      </span>
-                      <span className="flex-1 px-3 text-zinc-500 font-medium">
-                        {line}
-                      </span>
-                    </div>
-                  );
-                }
-                return (
-                  <div key={i} className="flex">
-                    <span className="w-10 shrink-0 select-none text-right pr-3 text-[10px] leading-5 text-zinc-300">
-                      {i + 1}
-                    </span>
-                    <span className="flex-1 px-3 text-zinc-700">{line}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
+          {diff ? <DiffViewer diff={diff} /> : (
             <div className="flex flex-1 items-center justify-center">
               <p className="text-caption text-zinc-400">diffを読み込めませんでした</p>
             </div>
           )}
         </div>
+        {/* Divider */}
+        <div
+          className="flex shrink-0 cursor-col-resize items-center justify-center bg-transparent hover:bg-mist/50 transition-colors"
+          style={{ width: 12 }}
+          onMouseDown={(e) => { e.preventDefault(); handleSplitDragStart(); }}
+        >
+          <div className="flex h-10 items-center justify-center rounded-full bg-mist/80">
+            <GripVertical className="h-3.5 w-3.5 text-zinc-400" />
+          </div>
+        </div>
+        {/* Right */}
+        <div ref={vertSplitRef} className="flex flex-1 flex-col overflow-hidden min-w-0 bg-pearl">
+          <div className="overflow-y-auto p-4 md:p-6" style={{ height: `${vertRatio * 100}%` }}>
+            {/* AI status badge */}
+            {aiStatus && !aiStatus.available && (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-caption text-amber-700">
+                {aiStatus.message || "AI評価が利用できません。ルールベースの評価のみ表示されます。"}
+              </div>
+            )}
 
-        {/* ===== Right: Reference + Input ===== */}
-        <div className="flex w-1/2 flex-col bg-pearl">
-          {/* Scrollable: original message + evaluation + result */}
-          <div className="flex-1 overflow-y-auto p-6">
             {/* Original Message Card */}
             <ScrollReveal>
               <div className="mb-6 rounded-2xl border border-mist bg-white p-5">
@@ -224,175 +328,194 @@ export default function ImprovePage() {
               </div>
             </ScrollReveal>
 
-            {/* Evaluation Card */}
-            {originalEval && (
+            {/* Evaluation Card — activeEvalが再評価時に差し替わる */}
+            {activeEval && !result?.applied && (
               <ScrollReveal>
-                <div className="mb-6 rounded-2xl border border-mist bg-white p-5">
-                  <h2 className="mb-4 text-body-sm font-semibold text-midnight-ink">
-                    評価結果
-                  </h2>
-
-                  {/* Issues */}
-                  {originalEval.issues.length > 0 && (
-                    <div className="mb-4">
-                      <p className="mb-2 text-caption font-medium text-zinc-500">
-                        問題点
+                <EvaluationCard
+                  score={activeEval.score}
+                  issues={activeEval.issues}
+                  suggestions={activeEval.suggestions}
+                  exampleMessage={activeEval.exampleMessage}
+                  label={hasReevaluated ? "評価結果（再評価）" : "評価結果"}
+                  aiAvailable={activeEval.aiAvailable}
+                  aspectScores={activeEval.aspectScores}
+                />
+                {/* GitHub反映ボタン（再評価後のみ） */}
+                {hasReevaluated && (
+                <div className="mt-4 border-t border-mist pt-4">
+                  {!showApplyGuide ? (
+                    <>
+                      <p className="mb-3 text-caption text-zinc-400">
+                        メッセージに問題がなければ「GitHubに反映」から修正手順を確認できます。
                       </p>
-                      <ul className="space-y-1.5">
-                        {originalEval.issues.map((issue, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-body-sm text-zinc-600 leading-relaxed"
-                          >
-                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                            <span>{issue}</span>
+                      <button
+                        onClick={handleApply}
+                        className="w-full rounded-xl bg-midnight-ink px-6 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+                      >
+                        GitHubに反映する
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="mb-3 text-body-sm font-semibold text-midnight-ink">
+                        GitHubでコミットメッセージを修正
+                      </h3>
+                      <div className="mb-3 rounded-xl border border-brand-teal/30 bg-snow p-4">
+                        <p className="mb-2 text-caption font-medium text-brand-teal">
+                          Step 1 — 改善メッセージをコピー
+                        </p>
+                        <div className="rounded-lg border border-mist bg-white p-3 font-mono text-body-sm leading-relaxed text-midnight-ink break-all">
+                          {improvedMessage}
+                        </div>
+                        <button
+                          onClick={handleCopy}
+                          className="mt-2 flex items-center gap-1.5 rounded-lg border border-mist bg-white px-3 py-1.5 text-caption font-medium text-zinc-600 transition-all hover:bg-pearl"
+                        >
+                          {copied ? "コピーしました ✓" : "クリップボードにコピー"}
+                        </button>
+                      </div>
+                      <div className="mb-3 rounded-xl border border-mist bg-snow p-4">
+                        <p className="mb-2 text-caption font-medium text-zinc-500">
+                          Step 2 — ターミナルでコミットを修正
+                        </p>
+                        <ol className="mb-3 space-y-1 pl-5 text-body-sm text-zinc-600">
+                          <li className="list-decimal">
+                            リポジトリのディレクトリで以下を実行：
+                            <code className="mx-1 rounded bg-pearl px-1.5 py-0.5 font-mono text-caption text-midnight-ink">
+                              {`git commit --amend -m "新しいメッセージ"`}
+                            </code>
                           </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Suggestions */}
-                  {originalEval.suggestions.length > 0 && (
-                    <div className="mb-4">
-                      <p className="mb-2 text-caption font-medium text-zinc-500">
-                        改善提案
-                      </p>
-                      <ul className="space-y-1.5">
-                        {originalEval.suggestions.map((s, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-body-sm text-zinc-600 leading-relaxed"
-                          >
-                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-teal" />
-                            <span>{s}</span>
+                          <li className="list-decimal">
+                            続けて：
+                            <code className="mx-1 rounded bg-pearl px-1.5 py-0.5 font-mono text-caption text-midnight-ink">
+                              git push --force
+                            </code>
                           </li>
-                        ))}
-                      </ul>
-                    </div>
+                        </ol>
+                        <a
+                          href={`https://github.com/${owner}/${name}/commit/${commit.sha}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-caption font-medium text-brand-teal hover:underline"
+                        >
+                          GitHubでコミットを確認する ↗
+                        </a>
+                      </div>
+                      <div className="rounded-xl border border-mist bg-snow p-4">
+                        <p className="mb-2 text-caption font-medium text-zinc-500">
+                          Step 3 — 修正完了
+                        </p>
+                        <p className="mb-3 text-caption text-zinc-400">
+                          GitHub上のコミットメッセージを修正したら、このボタンでCommitHyperにスコアとXPを反映します。
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowApplyGuide(false)}
+                            className="rounded-xl border border-mist bg-white px-5 py-2 text-body-sm font-medium text-zinc-500 transition-all hover:bg-pearl"
+                          >
+                            キャンセル
+                          </button>
+                          <button
+                            onClick={handleConfirmApply}
+                            disabled={applying}
+                            className="flex-1 rounded-xl bg-brand-teal px-6 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50"
+                          >
+                            {applying ? "反映中..." : "修正完了 — スコアを反映する"}
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
-
-                  {/* Good Example */}
-                  <div className="rounded-xl border border-mist bg-snow p-4">
-                    <p className="mb-1.5 text-caption font-medium text-zinc-500">
-                      良いコミットメッセージ例
-                    </p>
-                    <p className="font-mono text-body-sm leading-relaxed text-midnight-ink">
-                      {originalEval.exampleMessage}
-                    </p>
-                  </div>
                 </div>
+                )}
               </ScrollReveal>
             )}
 
-            {/* Re-evaluation Result */}
-            {result && (
+            {/* Applied Result */}
+            {result?.applied && (
               <div className="mb-4">
                 <ScrollReveal>
-                  <div
-                    className={`rounded-2xl border p-5 ${
-                      result.passed
-                        ? "border-leaf-soft/50 bg-white"
-                        : "border-cream-paper bg-white"
-                    }`}
-                  >
+                  <div className="rounded-2xl border border-leaf-soft/50 bg-white p-5">
                     <div className="mb-3 flex items-center justify-between">
                       <h2 className="text-body-sm font-semibold text-midnight-ink">
-                        再評価結果
+                        反映完了
                       </h2>
                       <div className="text-right">
-                        <span
-                          className={`text-heading-sm font-bold ${
-                            result.passed
-                              ? "text-leaf-soft"
-                              : "text-amber-600"
-                          }`}
-                        >
+                        <span className="text-heading-sm font-bold text-leaf-soft">
                           {result.score}
                           <span className="text-body-sm font-normal text-zinc-500">
                             /100
                           </span>
                         </span>
                         {result.xpGained > 0 && (
-                          <span className="ml-3 text-body-sm font-medium text-brand-teal">
+                          <span className="ml-3 text-body-sm font-bold text-brand-teal">
                             +{result.xpGained} XP
                           </span>
                         )}
                       </div>
                     </div>
-                    <p
-                      className={`mb-3 text-body-sm font-semibold ${
-                        result.passed ? "text-leaf-soft" : "text-zinc-500"
-                      }`}
-                    >
+                    <p className="text-body-sm font-semibold text-leaf-soft">
                       {result.passed
-                        ? "合格です！良いコミットメッセージです。"
-                        : "もう少し改善できます"}
+                        ? "改善を反映しました！"
+                        : "改善を反映しました。"}
                     </p>
-                    {result.issues.length > 0 && (
-                      <ul className="mb-3 space-y-1">
-                        {result.issues.map((issue, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-body-sm text-zinc-600 leading-relaxed"
-                          >
-                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                            <span>{issue}</span>
-                          </li>
-                        ))}
-                      </ul>
+                    {result.xpGained > 0 && (
+                      <p className="mt-2 text-body-sm text-zinc-500">
+                        {result.xpGained} XPを獲得しました。
+                      </p>
                     )}
-                    {result.suggestions.length > 0 && (
-                      <ul className="mb-3 space-y-1">
-                        {result.suggestions.map((s, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-body-sm text-zinc-600 leading-relaxed"
-                          >
-                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-teal" />
-                            <span>{s}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {result.exampleMessage && (
-                      <div className="rounded-xl border border-mist bg-snow p-4">
-                        <p className="mb-1.5 text-caption font-medium text-zinc-500">
-                          良いコミットメッセージ例
-                        </p>
-                        <p className="font-mono text-body-sm leading-relaxed text-midnight-ink">
-                          {result.exampleMessage}
-                        </p>
-                      </div>
-                    )}
+                    <div className="mt-4 border-t border-mist pt-4">
+                      <button
+                        onClick={() =>
+                          router.push(`/dashboard/${owner}/${name}`)
+                        }
+                        className="rounded-xl bg-brand-teal px-6 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+                      >
+                        ダッシュボードに戻る
+                      </button>
+                    </div>
                   </div>
                 </ScrollReveal>
               </div>
             )}
           </div>
 
-          {/* Input area — fixed at bottom */}
-          <div className="shrink-0 border-t border-mist bg-white p-6">
-            <textarea
-              value={improvedMessage}
-              onChange={(e) => setImprovedMessage(e.target.value)}
-              placeholder="新しいコミットメッセージを入力..."
-              rows={4}
-              className="w-full resize-none rounded-xl border border-mist bg-white px-4 py-3 font-mono text-body-sm text-midnight-ink placeholder:text-fog-gray focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20"
-            />
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-caption text-zinc-500">
-                type(scope): 「何を」「なぜ」変えたか具体的に
-              </span>
-              <button
-                onClick={handleReevaluate}
-                disabled={submitting || !improvedMessage.trim()}
-                className="rounded-xl bg-brand-teal px-6 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:hover:brightness-100"
-              >
-                {submitting ? "評価中..." : "再評価する"}
-              </button>
+          {/* Vertical divider */}
+          <div
+            className="shrink-0 cursor-row-resize bg-transparent hover:bg-mist/50 transition-colors flex items-center justify-center"
+            style={{ height: 8 }}
+            onMouseDown={(e) => { e.preventDefault(); handleVertDragStart(); }}
+          >
+            <div className="flex w-10 items-center justify-center rounded-full bg-mist/80">
+              <GripVertical className="h-3 w-3 text-zinc-400 rotate-90" />
             </div>
           </div>
+
+          {/* Input area — 反映済みなら非表示 */}
+          {!result?.applied && (
+            <div className="flex flex-1 flex-col overflow-hidden border-t border-mist bg-white">
+              <div className="flex-1 p-4 md:p-6 pb-2 flex flex-col">
+                <textarea
+                  value={improvedMessage}
+                  onChange={(e) => setImprovedMessage(e.target.value)}
+                  placeholder="新しいコミットメッセージを入力..."
+                  className="flex-1 resize-none rounded-xl border border-mist bg-white px-4 py-3 font-mono text-body-sm text-midnight-ink placeholder:text-fog-gray focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20 min-h-[60px]"
+                />
+              </div>
+              <div className="shrink-0 flex items-center justify-between px-4 md:px-6 pb-4 md:pb-6">
+                <span className="text-caption text-zinc-500">
+                  type(scope): 「何を」「なぜ」変えたか具体的に
+                </span>
+                <button
+                  onClick={handleReevaluate}
+                  disabled={submitting || !improvedMessage.trim()}
+                  className="rounded-xl bg-brand-teal px-6 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:hover:brightness-100"
+                >
+                  {submitting ? "評価中..." : "再評価する"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

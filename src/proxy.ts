@@ -7,5 +7,5 @@ export default middlewareAuth((request) => {
 });
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*"],
+  matcher: ["/dashboard", "/dashboard/:path*", "/api/repos/:path*"],
 };
