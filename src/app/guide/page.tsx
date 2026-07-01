@@ -42,23 +42,23 @@ const VALID_TYPES = [
 const CRITERIA = [
   {
     name: "形式の明確さ",
-    points: 20,
+    points: 30,
     icon: FileText,
-    desc: "type(scope): summary の形式に従っているか",
+    desc: "type(scope): summary の形式に従っているか（scopeあり30点／なし15点）",
     eval: "ルールベース",
     evalColor: "bg-zinc-100 text-zinc-500",
   },
   {
     name: "変更種別の適切さ",
-    points: 15,
+    points: 20,
     icon: Code2,
-    desc: "feat/fix 等のtypeが変更内容に合っているか",
+    desc: "feat/fix 等のtypeが変更内容に合っているか（標準20点／近似10点）",
     eval: "ルールベース",
     evalColor: "bg-zinc-100 text-zinc-500",
   },
   {
     name: "Summaryの具体性",
-    points: 25,
+    points: 20,
     icon: Eye,
     desc: "何を変更したかが具体的に伝わるか",
     eval: "AI評価",
@@ -66,9 +66,9 @@ const CRITERIA = [
   },
   {
     name: "Why・背景の説明",
-    points: 20,
+    points: 15,
     icon: MessageSquare,
-    desc: "なぜ変更したか、目的が伝わるか",
+    desc: "なぜ変更したか、目的が伝わるか（bodyも確認）",
     eval: "AI評価",
     evalColor: "bg-brand-teal/10 text-brand-teal",
   },
@@ -82,7 +82,7 @@ const CRITERIA = [
   },
   {
     name: "業務での追跡しやすさ",
-    points: 10,
+    points: 5,
     icon: Search,
     desc: "scopeやIssue番号など、追跡に役立つ情報があるか",
     eval: "ルールベース",
@@ -520,12 +520,12 @@ export default function GuidePage() {
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-3xl bg-pearl p-4">
                   <p className="text-caption font-semibold text-zinc-500">ルールベース</p>
-                  <p className="mt-1 text-[32px] font-bold text-midnight-ink">55点</p>
+                  <p className="mt-1 text-[32px] font-bold text-midnight-ink">65点</p>
                   <p className="mt-1 text-caption text-zinc-500">形式・種別・読みやすさ・追跡性</p>
                 </div>
                 <div className="rounded-3xl border border-brand-teal/20 bg-white p-4">
                   <p className="text-caption font-semibold text-brand-teal">AI評価</p>
-                  <p className="mt-1 text-[32px] font-bold text-midnight-ink">45点</p>
+                  <p className="mt-1 text-[32px] font-bold text-midnight-ink">35点</p>
                   <p className="mt-1 text-caption text-zinc-500">具体性・Why（Gemini Flash）</p>
                 </div>
               </div>
