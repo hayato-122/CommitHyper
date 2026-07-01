@@ -95,7 +95,7 @@ function PromptModal({ onClose }: { onClose: () => void }) {
 
   const promptContent = `# Commit Message Generator
 
-あなたはGitリポジトリのdiffから最適なコミットメッセージを生成するアシスタントです。
+あなたはコミットメッセージを生成するアシスタントです。diffがある場合は一緒に貼り付けてください。
 以下のルールに従い、コミットメッセージを**1つだけ**出力してください。説明や補足は一切不要です。
 
 ## 形式（必須）
