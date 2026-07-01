@@ -11,7 +11,7 @@ const LEVELS = [
 
 function calcLevel(xp: number) {
   let current = LEVELS[0];
-  let next = LEVELS[1] ?? null;
+  let next: (typeof LEVELS)[number] | null = LEVELS[1] ?? null;
   for (const l of LEVELS) {
     if (xp >= l.xpRequired) {
       current = l;

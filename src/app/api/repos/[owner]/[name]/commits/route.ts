@@ -17,7 +17,7 @@ type SerializedCommit = {
   id: string;
   sha: string;
   message: string;
-  authorName: string;
+  authorName: string | null;
   committedAt: string;
   initialScore: number;
   currentScore: number;
@@ -136,7 +136,7 @@ export async function GET(
         currentScore: c.currentScore,
         status: c.status,
         firstIssue: c.evaluations?.[0]?.issues
-          ? (JSON.parse(c.evaluations[0].issues) as string[])[0] ?? null
+          ? (JSON.parse(c.evaluations[0].issues as string) as string[])[0] ?? null
           : null,
         exampleMessage: c.evaluations?.[0]?.exampleMessage ?? null,
         aspectScores: c.evaluations?.[0]?.aspectScores ?? null,
