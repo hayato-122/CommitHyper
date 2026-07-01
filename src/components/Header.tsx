@@ -11,7 +11,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, BookOpen, Search, Menu } from "lucide-react";
+import { LogOut, BookOpen, Search, Menu, MessageSquareText } from "lucide-react";
 
 type User = { name: string; avatarUrl: string };
 
@@ -99,6 +99,10 @@ export function Header({ left, right, user }: HeaderProps) {
             <BookOpen className="h-3.5 w-3.5" />
             ガイド
           </Link>
+          <Link href="/evaluate/message" className="hidden md:flex items-center gap-1.5 text-body-sm text-zinc-500 hover:text-midnight-ink">
+            <MessageSquareText className="h-3.5 w-3.5" />
+            メッセージを評価
+          </Link>
           {user && (
             <div className="hidden md:block">
               <DropdownMenu>
@@ -139,6 +143,10 @@ export function Header({ left, right, user }: HeaderProps) {
                 <DropdownMenuItem onClick={() => router.push("/guide")} className="cursor-pointer gap-2">
                   <BookOpen className="h-4 w-4" />
                   ガイド
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/evaluate/message")} className="cursor-pointer gap-2">
+                  <MessageSquareText className="h-4 w-4" />
+                  メッセージを評価
                 </DropdownMenuItem>
                 {user && (
                   <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })} className="cursor-pointer gap-2 border-t border-mist">
