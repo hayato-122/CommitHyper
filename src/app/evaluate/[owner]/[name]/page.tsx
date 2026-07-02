@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { CommitCard } from "@/components/CommitCard";
 import { Pager } from "@/components/Pager";
+import { AnalyzeLoading } from "@/components/AnalyzeLoading";
+import { useSSEAnalysis } from "@/hooks/useSSEAnalysis";
 import { SCORE } from "@/lib/evaluateCommit";
 import { exportMarkdown, downloadFile, type ExportCommit } from "@/lib/export";
 import { ArrowLeft, ArrowUpDown, Download } from "lucide-react";
@@ -46,6 +48,8 @@ export default function EvaluatePage() {
   const [sortBy, setSortBy] = useState<"score" | "date">("score");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
+  const { analyzeState, startAnalysis } = useSSEAnalysis();
+
   function handleExportMd() {
     const ownerName = `${owner}/${name}`;
     const commits: ExportCommit[] = allCommits.map((c) => ({
@@ -61,28 +65,56 @@ export default function EvaluatePage() {
     downloadFile(md, `${owner}-${name}-commits.md`);
   }
 
-  async function load() {
+  const init = useCallback(async () => {
     setLoading(true);
     setError("");
+
     try {
-      const res = await fetch(`/api/evaluate/${owner}/${name}/commits`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `エラー (${res.status})`);
+      const statusRes = await fetch(
+        `/api/evaluate/${owner}/${name}/commits?status=true`,
+      );
+      if (!statusRes.ok) {
+        const data = await statusRes.json().catch(() => ({}));
+        throw new Error(data.error || `エラー (${statusRes.status})`);
       }
-      const data: EvalCommit[] = await res.json();
-      setAllCommits(data);
+      const status = await statusRes.json();
+
+      if (status.cached) {
+        const res = await fetch(`/api/evaluate/${owner}/${name}/commits`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `エラー (${res.status})`);
+        }
+        const data: EvalCommit[] = await res.json();
+        setAllCommits(data);
+        setLoading(false);
+      } else {
+        const url = `/api/evaluate/${owner}/${name}/commits?refresh=true`;
+        startAnalysis(url, {
+          onRuleComplete(data) {
+            const d = data as { commits: EvalCommit[] };
+            setAllCommits(d.commits);
+          },
+          onAIComplete(data) {
+            const d = data as { commits: EvalCommit[] };
+            setAllCommits(d.commits);
+            setLoading(false);
+          },
+          onError() {
+            setError("分析に失敗しました。もう一度お試しください。");
+            setLoading(false);
+          },
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
-    } finally {
       setLoading(false);
     }
-  }
+  }, [owner, name, startAnalysis]);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [owner, name]);
+    init();
+  }, [init]);
 
   function sortCommits(list: EvalCommit[]) {
     return [...list].sort((a, b) => {
@@ -113,6 +145,10 @@ export default function EvaluatePage() {
   const needsImprovement = allCommits.filter((c) => c.score < SCORE.GOOD).length;
   const excellentCount = allCommits.filter((c) => c.score >= SCORE.GOOD).length;
 
+  if (analyzeState) {
+    return <AnalyzeLoading owner={owner} name={name} state={analyzeState} />;
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-pearl">
@@ -141,7 +177,7 @@ export default function EvaluatePage() {
             </h1>
             <p className="mt-2 text-body text-zinc-500">{error}</p>
             <div className="mt-6 flex items-center justify-center gap-3">
-              <button onClick={load} className="rounded-2xl border border-mist bg-white px-6 py-3 text-body-sm font-medium text-zinc-600 transition-all hover:bg-pearl">
+              <button onClick={init} className="rounded-2xl border border-mist bg-white px-6 py-3 text-body-sm font-medium text-zinc-600 transition-all hover:bg-pearl">
                 再試行
               </button>
               <Link href="/" className="rounded-2xl bg-brand-teal px-6 py-3 text-body-sm font-semibold text-white transition-all hover:brightness-110">

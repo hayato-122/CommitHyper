@@ -1,4 +1,4 @@
-import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
+import { evaluateCommit, combineWithAi, CommitEvaluationResult } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 import { fetchAllCommits } from "@/lib/github";
 
@@ -15,7 +15,28 @@ type EvaluatedCommit = {
   aspectScores: Record<string, number>;
 };
 
-// 簡易メモリキャッシュ（TTL: 30分）
+function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function toEvaluatedCommit(
+  c: Awaited<ReturnType<typeof fetchAllCommits>>[number],
+  result: CommitEvaluationResult,
+): EvaluatedCommit {
+  return {
+    sha: c.sha,
+    message: c.commit.message,
+    authorName: c.commit.author?.name ?? "",
+    committedAt: (c.commit.author?.date ?? c.commit.committer?.date ?? new Date().toISOString()),
+    score: result.score,
+    rank: result.rank,
+    issues: result.issues,
+    suggestions: result.suggestions,
+    exampleMessage: result.exampleMessage,
+    aspectScores: result.aspectScores,
+  };
+}
+
 const cache = new Map<string, { data: EvaluatedCommit[]; expiry: number }>();
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -28,7 +49,6 @@ function getCached(key: string): EvaluatedCommit[] | null {
 
 function setCache(key: string, data: EvaluatedCommit[]) {
   cache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
-  // メモリリーク防止: 100件を超えたら古い順に削除
   if (cache.size > 100) {
     const oldest = cache.keys().next().value;
     if (oldest) cache.delete(oldest);
@@ -54,57 +74,118 @@ export async function GET(
   const limitParam = url.searchParams.get("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : 200;
 
-  // キャッシュキー
   const cacheKey = `${owner}/${name}/${branch || "default"}`;
 
-  // キャッシュがあれば（かつrefreshでなければ）返す
+  const isStatusCheck = url.searchParams.get("status") === "true";
+  if (isStatusCheck) {
+    return Response.json({ cached: !refresh && getCached(cacheKey) !== null });
+  }
+
   if (!refresh) {
     const cached = getCached(cacheKey);
     if (cached) return Response.json(cached);
   }
 
-  try {
-    const githubCommits = await fetchAllCommits(owner, name, token, branch, limit);
-    const results: EvaluatedCommit[] = [];
+  const encoder = new TextEncoder();
+  let isStreamCancelled = false;
 
-    for (const c of githubCommits) {
-      const ruleResult = evaluateCommit(c.commit.message);
-      // ルールで100点ならAI評価不要
-      const aiResult = ruleResult.score >= 100
-        ? null
-        : await aiEvaluateCommit(c.commit.message);
-      const combined = combineWithAi(ruleResult, aiResult);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        if (isStreamCancelled) return;
+        try {
+          controller.enqueue(encoder.encode(sseEvent(event, data)));
+        } catch {
+          isStreamCancelled = true;
+        }
+      };
 
-      results.push({
-        sha: c.sha,
-        message: c.commit.message,
-        authorName: c.commit.author?.name ?? "",
-        committedAt: (c.commit.author?.date ?? c.commit.committer?.date ?? new Date().toISOString()),
-        score: combined.score,
-        rank: combined.rank,
-        issues: combined.issues,
-        suggestions: combined.suggestions,
-        exampleMessage: combined.exampleMessage,
-        aspectScores: combined.aspectScores,
-      });
-    }
+      try {
+        send("progress", { phase: "fetch", current: 0, total: 0, message: "GitHubからコミットを取得中..." });
+        const githubCommits = await fetchAllCommits(owner, name, token, branch, limit);
+        send("progress", { phase: "fetch_done", current: githubCommits.length, total: githubCommits.length, message: `${githubCommits.length}件のコミットを取得完了` });
 
-    // キャッシュに保存
-    setCache(cacheKey, results);
+        send("phase", { name: "rule", message: "ルールベース評価中..." });
+        const ruleResults: { commit: typeof githubCommits[number]; result: CommitEvaluationResult }[] = [];
 
-    return Response.json(results);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    const status = message.includes("404") ? 404 : 500;
+        for (let i = 0; i < githubCommits.length; i++) {
+          const c = githubCommits[i];
+          const ruleResult = evaluateCommit(c.commit.message);
+          ruleResults.push({ commit: c, result: ruleResult });
+          send("progress", { phase: "rule", current: i + 1, total: githubCommits.length });
+        }
 
-    if (status === 404) {
-      return Response.json(
-        { error: "このリポジトリは存在しないか、非公開です" },
-        { status: 404 },
-      );
-    }
+        const ruleCommits = ruleResults.map((r) => toEvaluatedCommit(r.commit, r.result));
+        const totalInitial = ruleCommits.reduce((s, c) => s + c.score, 0);
+        const initialAvg = Math.round(totalInitial / ruleCommits.length);
 
-    console.error("[evaluate/commits]", error);
-    return Response.json({ error: message }, { status: 500 });
-  }
+        send("rule_complete", {
+          commits: ruleCommits,
+          totalCount: ruleCommits.length,
+          initialAvg,
+          estimatedAiSeconds: Math.round(ruleCommits.length * 1.5),
+        });
+
+        send("phase", { name: "ai", message: "AI評価中..." });
+        const startTime = Date.now();
+        const aiResults: EvaluatedCommit[] = [];
+
+        for (let i = 0; i < ruleResults.length; i++) {
+          if (isStreamCancelled) break;
+
+          const { commit, result: ruleResult } = ruleResults[i];
+          const aiResult = ruleResult.score >= 100 ? null : await aiEvaluateCommit(commit.commit.message);
+          const combined = combineWithAi(ruleResult, aiResult);
+
+          aiResults.push(toEvaluatedCommit(commit, combined));
+
+          const elapsed = (Date.now() - startTime) / 1000;
+          const perItem = elapsed / (i + 1);
+          const remaining = Math.round(perItem * (ruleResults.length - i - 1));
+
+          send("ai_progress", {
+            current: i + 1,
+            total: ruleResults.length,
+            currentMessage: commit.commit.message.slice(0, 60),
+            score: combined.score,
+            estimatedSecondsRemaining: remaining,
+          });
+        }
+
+        const totalCurrent = aiResults.reduce((s, c) => s + c.score, 0);
+        const currentAvg = Math.round(totalCurrent / aiResults.length);
+
+        setCache(cacheKey, aiResults);
+
+        send("ai_complete", {
+          commits: aiResults,
+          totalCount: aiResults.length,
+          initialAvg,
+          currentAvg,
+        });
+
+        controller.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+
+        if (message.includes("404")) {
+          send("error", { error: "このリポジトリは存在しないか、非公開です" });
+        } else {
+          console.error("[evaluate/commits] SSE error:", error);
+          send("error", { message: "分析中にエラーが発生しました" });
+        }
+
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

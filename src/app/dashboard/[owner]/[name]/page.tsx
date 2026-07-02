@@ -7,13 +7,14 @@ import { ScrollReveal } from "@/components/ScrollReveal";
 import { Header } from "@/components/Header";
 import { CommitCard } from "@/components/CommitCard";
 import { Pager } from "@/components/Pager";
+import { AnalyzeLoading } from "@/components/AnalyzeLoading";
+import { useSSEAnalysis } from "@/hooks/useSSEAnalysis";
 import { SCORE } from "@/lib/evaluateCommit";
 import { exportMarkdown, downloadFile, type ExportCommit } from "@/lib/export";
 import {
   ArrowLeft,
   RotateCw,
   ArrowUpDown,
-  Sparkles,
   Download,
 } from "lucide-react";
 
@@ -52,17 +53,6 @@ type Progress = {
   avatarUrl: string;
 };
 
-type AnalyzeState = {
-  phase: "fetch" | "rule" | "ai";
-  current: number;
-  total: number;
-  message: string;
-  currentMessage?: string;
-  score?: number;
-  estimatedSecondsRemaining?: number;
-  initialAvg?: number;
-};
-
 export default function DashboardPage() {
   const params = useParams();
   const owner = params.owner as string;
@@ -83,8 +73,7 @@ export default function DashboardPage() {
   const [sortBy, setSortBy] = useState<"score" | "date">("score");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  // SSE分析状態
-  const [analyzeState, setAnalyzeState] = useState<AnalyzeState | null>(null);
+  const { analyzeState, startAnalysis } = useSSEAnalysis();
 
   function handleExportMd() {
     const ownerName = `${owner}/${name}`;
@@ -102,7 +91,6 @@ export default function DashboardPage() {
     const md = exportMarkdown(commits, ownerName);
     downloadFile(md, `${owner}-${name}-commits.md`);
   }
-  const evtSourceRef = useRef<EventSource | null>(null);
 
   const loadAllCommits = useCallback(
     async (forceRefresh = false, branch?: string) => {
@@ -138,99 +126,11 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // SSEで分析を開始
-  const startAnalysis = useCallback((branch?: string) => {
-    // 既存のSSE接続を閉じる
-    if (evtSourceRef.current) {
-      evtSourceRef.current.close();
-    }
-
-    const params = new URLSearchParams({ refresh: "true" });
-    if (branch && branch !== "default") params.set("branch", branch);
-    const url = `/api/repos/${owner}/${name}/commits?${params}`;
-
-    setAnalyzeState({
-      phase: "fetch",
-      current: 0,
-      total: 0,
-      message: "GitHubからコミットを取得中...",
-    });
-
-    const evtSource = new EventSource(url);
-    evtSourceRef.current = evtSource;
-
-    evtSource.addEventListener("progress", (e) => {
-      const data = JSON.parse(e.data);
-      if (data.phase === "fetch_done") {
-        setAnalyzeState((prev) => ({
-          ...prev!,
-          phase: "rule",
-          current: 0,
-          total: data.total,
-          message: data.message,
-        }));
-      }
-    });
-
-    evtSource.addEventListener("phase", (e) => {
-      const data = JSON.parse(e.data);
-      setAnalyzeState((prev) => ({
-        ...prev!,
-        phase: data.name === "rule" ? "rule" : "ai",
-        message: data.message,
-      }));
-    });
-
-    evtSource.addEventListener("rule_complete", (e) => {
-      const data = JSON.parse(e.data);
-      setAllCommits(data.commits);
-      setAnalyzeState((prev) => ({
-        ...prev!,
-        phase: "ai",
-        current: 0,
-        total: data.totalCount,
-        message: "AIで詳細評価中...",
-        estimatedSecondsRemaining: data.estimatedAiSeconds,
-        initialAvg: data.initialAvg,
-      }));
-    });
-
-    evtSource.addEventListener("ai_progress", (e) => {
-      const data = JSON.parse(e.data);
-      setAnalyzeState((prev) => ({
-        ...prev!,
-        current: data.current,
-        total: data.total,
-        currentMessage: data.currentMessage,
-        score: data.score,
-        estimatedSecondsRemaining: data.estimatedSecondsRemaining,
-      }));
-    });
-
-    evtSource.addEventListener("ai_complete", (e) => {
-      const data = JSON.parse(e.data);
-      setAllCommits(data.commits);
-      setAnalyzeState(null);
-      setLoading(false);
-      evtSource.close();
-      evtSourceRef.current = null;
-    });
-
-    evtSource.addEventListener("error", () => {
-      // エラー時は通常読み込みにフォールバック
-      setAnalyzeState(null);
-      setLoading(false);
-      evtSource.close();
-      evtSourceRef.current = null;
-    });
-  }, [owner, name]);
-
   useEffect(() => {
     let cancelled = false;
     async function init() {
       setLoading(true);
 
-      // 並行してブランチとプログレスを取得
       const [branchesRes, progressRes] = await Promise.all([
         fetch(`/api/repos/${owner}/${name}/branches`),
         fetch("/api/user/progress"),
@@ -250,7 +150,6 @@ export default function DashboardPage() {
         setProgress(data);
       }
 
-      // 分析状態を確認
       const statusRes = await fetch(
         `/api/repos/${owner}/${name}/commits?status=true`,
       );
@@ -259,22 +158,32 @@ export default function DashboardPage() {
       if (cancelled) return;
 
       if (status.analyzed) {
-        // キャッシュあり → JSONでロード
         await loadAllCommits();
         setLoading(false);
       } else {
-        // 初回 → SSEで分析（取得したブランチがあれば指定）
         const initialBranch = Array.isArray(branchesData) && branchesData.length > 0 ? branchesData[0] : undefined;
-        startAnalysis(initialBranch);
+        const params = new URLSearchParams({ refresh: "true" });
+        if (initialBranch && initialBranch !== "default") params.set("branch", initialBranch);
+        const url = `/api/repos/${owner}/${name}/commits?${params}`;
+        startAnalysis(url, {
+          onRuleComplete(data) {
+            const d = data as { commits: Commit[] };
+            setAllCommits(d.commits);
+          },
+          onAIComplete(data) {
+            const d = data as { commits: Commit[] };
+            setAllCommits(d.commits);
+            setLoading(false);
+          },
+          onError() {
+            setLoading(false);
+          },
+        });
       }
     }
     init();
     return () => {
       cancelled = true;
-      if (evtSourceRef.current) {
-        evtSourceRef.current.close();
-        evtSourceRef.current = null;
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -329,117 +238,29 @@ export default function DashboardPage() {
   async function handleRefresh() {
     setRefreshing(true);
     setPage(1);
-    // SSEで再分析
-    startAnalysis();
+    const params = new URLSearchParams({ refresh: "true" });
+    const url = `/api/repos/${owner}/${name}/commits?${params}`;
+    startAnalysis(url, {
+      onRuleComplete(data) {
+        const d = data as { commits: Commit[] };
+        setAllCommits(d.commits);
+      },
+      onAIComplete(data) {
+        const d = data as { commits: Commit[] };
+        setAllCommits(d.commits);
+        setRefreshing(false);
+      },
+      onError() {
+        setRefreshing(false);
+      },
+    });
     await loadProgress();
-    setRefreshing(false);
   }
 
-  // ---------- 分析進捗画面 ----------
   if (analyzeState) {
-    const total = analyzeState.total || 0;
-    const current = analyzeState.current || 0;
-    const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-    const isAiPhase = analyzeState.phase === "ai";
-    const estimatedSec = analyzeState.estimatedSecondsRemaining ?? 0;
-    const estimatedMin = Math.ceil(estimatedSec / 60);
-
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-pearl px-6">
-        <div className="w-full max-w-lg">
-          {/* Title */}
-          <div className="mb-10 text-center">
-            <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-teal">
-              <Sparkles className="h-7 w-7 text-white" />
-            </div>
-            <h1
-              className="text-heading font-semibold text-midnight-ink"
-              style={{ fontFamily: "var(--font-dm-sans), var(--font-noto-sans-jp), sans-serif" }}
-            >
-              {owner}/{name}
-            </h1>
-            <p className="mt-2 text-body text-zinc-500">
-              コミットを分析しています
-            </p>
-          </div>
-
-          {/* Progress bar */}
-          <div className="mb-8">
-            <div className="mb-2 flex items-center justify-between text-body-sm">
-              <span className="font-medium text-zinc-700">
-                {isAiPhase ? `AI評価 ${current}/${total}` : "準備中..."}
-              </span>
-              {isAiPhase && <span className="text-zinc-500">{percent}%</span>}
-            </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-mist">
-              <div
-                className="h-full rounded-full bg-brand-teal transition-all duration-500"
-                style={{ width: `${isAiPhase ? percent : 10}%` }}
-              />
-            </div>
-            {isAiPhase && estimatedSec > 0 && (
-              <p className="mt-2 text-caption text-zinc-400">
-                残り約 {estimatedMin} 分
-              </p>
-            )}
-          </div>
-
-          {/* Phase checklist */}
-          <div className="mb-6 space-y-2">
-            {/* Phase 1: Fetch */}
-            <div className="flex items-center gap-3 rounded-xl border border-mist bg-white px-4 py-3">
-              {analyzeState.phase === "fetch" ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
-              ) : (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-teal text-[10px] text-white">✓</span>
-              )}
-              <span className={`text-body-sm ${analyzeState.phase === "fetch" ? "text-midnight-ink font-medium" : "text-zinc-500"}`}>
-                GitHubからコミットを取得
-                {analyzeState.phase !== "fetch" && `（${total}件）`}
-              </span>
-            </div>
-            {/* Phase 2: Rule */}
-            <div className="flex items-center gap-3 rounded-xl border border-mist bg-white px-4 py-3">
-              {analyzeState.phase === "fetch" ? (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[10px] text-zinc-400">—</span>
-              ) : analyzeState.phase === "rule" ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
-              ) : (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-teal text-[10px] text-white">✓</span>
-              )}
-              <span className={`text-body-sm ${analyzeState.phase === "rule" ? "text-midnight-ink font-medium" : analyzeState.phase === "fetch" ? "text-zinc-400" : "text-zinc-500"}`}>
-                ルールベース評価
-                {analyzeState.initialAvg != null && `（平均 ${analyzeState.initialAvg}点）`}
-              </span>
-            </div>
-            {/* Phase 3: AI */}
-            <div className="flex items-center gap-3 rounded-xl border border-brand-teal/20 bg-white px-4 py-3">
-              {isAiPhase ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
-              ) : (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[10px] text-zinc-400">—</span>
-              )}
-              <span className={`text-body-sm ${isAiPhase ? "text-midnight-ink font-medium" : "text-zinc-400"}`}>
-                AI評価{isAiPhase ? ` ${current}/${total}` : ""}
-              </span>
-            </div>
-          </div>
-
-          {/* Current commit being evaluated */}
-          {isAiPhase && analyzeState.currentMessage && (
-            <div className="rounded-2xl border border-mist bg-white p-4">
-              <p className="mb-1 text-caption font-medium text-zinc-400">評価中</p>
-              <p className="font-mono text-body-sm leading-relaxed text-midnight-ink break-all line-clamp-2">
-                {analyzeState.currentMessage}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <AnalyzeLoading owner={owner} name={name} state={analyzeState} />;
   }
 
-  // ---------- 通常のローディング ----------
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
