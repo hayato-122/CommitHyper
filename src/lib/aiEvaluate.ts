@@ -126,9 +126,12 @@ export async function aiEvaluateCommit(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const response = await fetch(`${GEMINI_API_ENDPOINT}?key=${apiKey}`, {
+      const response = await fetch(GEMINI_API_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         signal: controller.signal,
         body: JSON.stringify({
           contents: [
