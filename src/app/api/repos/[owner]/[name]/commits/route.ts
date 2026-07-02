@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateCommit } from "@/lib/evaluateCommit";
 import { safeParseJson } from "@/lib/json";
+import { logger } from "@/lib/logger";
 import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
 import { runSSEPipeline, evaluateWithAi } from "@/lib/ssePipeline";
 import { fetchAllCommits } from "@/lib/github";
@@ -109,7 +110,7 @@ export async function GET(
 
       sse.close();
     } catch (error) {
-      console.error("[commits] SSE error:", error);
+      logger.error("[commits] SSE error:", error);
       sse.error({ message: "分析中にエラーが発生しました" });
     }
   })();

@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<{ name: string; avatarUrl: string } | null>(null);
 
   useEffect(() => {
@@ -29,7 +30,10 @@ export default function DashboardPage() {
       setRepos(Array.isArray(repoData) ? repoData : []);
       if (userData.name) setUser({ name: userData.name, avatarUrl: userData.avatarUrl });
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      setLoading(false);
+      setError("リポジトリの読み込みに失敗しました。もう一度お試しください。");
+    });
   }, []);
 
   async function handleSelect(repo: Repo) {
@@ -54,6 +58,25 @@ export default function DashboardPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-zinc-500">リポジトリを読み込み中...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen flex-col bg-pearl">
+        <Header user={user} />
+        <main className="mx-auto flex max-w-6xl flex-1 items-center px-8 py-16">
+          <div className="text-center">
+            <p className="text-[1.25rem] font-medium text-red-600">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 rounded-xl bg-brand-teal px-5 py-2 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+            >
+              再試行
+            </button>
+          </div>
+        </main>
       </div>
     );
   }

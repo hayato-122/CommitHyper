@@ -1,5 +1,6 @@
 import { evaluateCommit, CommitEvaluationResult } from "@/lib/evaluateCommit";
 import { fetchAllCommits } from "@/lib/github";
+import { logger } from "@/lib/logger";
 import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
 import { runSSEPipeline, evaluateWithAi } from "@/lib/ssePipeline";
 
@@ -106,7 +107,7 @@ export async function GET(
       if (message.includes("404")) {
         sse.error({ error: "このリポジトリは存在しないか、非公開です" });
       } else {
-        console.error("[evaluate/commits] SSE error:", error);
+        logger.error("[evaluate/commits] SSE error:", error);
         sse.error({ message: "分析中にエラーが発生しました" });
       }
     }

@@ -1,3 +1,5 @@
+import { logger } from "@/lib/logger";
+
 /**
  * GitHub API 共通クライアント
  * 認証済みルート（session.accessToken）と未認証ルート（GITHUB_TOKEN）の両方から使われる
@@ -44,7 +46,7 @@ export async function fetchAllCommits(
     });
 
     if (!res.ok) {
-      console.error(
+      logger.error(
         `[github] fetchAllCommits error: ${res.status}`,
         await res.text().catch(() => ""),
       );

@@ -1,3 +1,5 @@
+import { logger } from "@/lib/logger";
+
 /**
  * AIによるコミットメッセージ評価サービス
  * Gemini Flash API を利用して、観点3（具体性）と観点4（Why）を評価する
@@ -113,7 +115,7 @@ export async function aiEvaluateCommit(
 ): Promise<AiEvaluationResult | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.trim().length === 0) {
-    console.log("[aiEvaluate] GEMINI_API_KEY not set, skipping AI evaluation");
+    logger.info("[aiEvaluate] GEMINI_API_KEY not set, skipping AI evaluation");
     return null;
   }
 
@@ -161,7 +163,7 @@ export async function aiEvaluateCommit(
           (retryAfter || (attempt + 1) * 3) * 1000,
           15000,
         );
-        console.warn(
+        logger.warn(
           `[aiEvaluate] Rate limited (429), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`,
         );
         await delay(waitMs);
@@ -171,7 +173,7 @@ export async function aiEvaluateCommit(
       if (!response.ok) {
         const errorBody = await response.text().catch(() => "unknown");
         lastError = `Gemini API error: ${response.status}`;
-        console.error(
+        logger.error(
           `[aiEvaluate] Gemini API error: ${response.status} ${response.statusText}`,
           errorBody.slice(0, 500),
         );
@@ -183,7 +185,7 @@ export async function aiEvaluateCommit(
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) {
         lastError = "Empty response from Gemini API";
-        console.error("[aiEvaluate] Empty response from Gemini API");
+        logger.error("[aiEvaluate] Empty response from Gemini API");
         await delay((attempt + 1) * 1000);
         continue;
       }
@@ -191,7 +193,7 @@ export async function aiEvaluateCommit(
       const jsonStr = extractJson(text);
       if (!jsonStr) {
         lastError = "No JSON found in Gemini response";
-        console.error(
+        logger.error(
           "[aiEvaluate] No JSON found in Gemini response:",
           text.slice(0, 300),
         );
@@ -229,7 +231,7 @@ export async function aiEvaluateCommit(
       };
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Unknown error";
-      console.error(
+      logger.error(
         `[aiEvaluate] Attempt ${attempt + 1}/${maxRetries} failed:`,
         lastError,
       );
@@ -239,7 +241,7 @@ export async function aiEvaluateCommit(
     }
   }
 
-  console.error("[aiEvaluate] All attempts failed:", lastError);
+  logger.error("[aiEvaluate] All attempts failed:", lastError);
   return null;
 }
 
