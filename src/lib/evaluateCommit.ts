@@ -53,6 +53,10 @@ function getRank(score: number): CommitEvaluationResult["rank"] {
     "poor";
 }
 
+export function isMergeMessage(message: string): boolean {
+  return /^merge (pull request|branch|remote-tracking branch|tag)/i.test(message);
+}
+
 export function evaluateCommit(message: string): CommitEvaluationResult {
   const issues: string[] = [];
   const suggestions: string[] = [];
@@ -89,7 +93,7 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
     };
   }
 
-  if (/^merge pull request/i.test(firstLine)) {
+  if (isMergeMessage(message)) {
     return {
       score: 55,
       rank: "needs_improvement",
@@ -339,7 +343,7 @@ function containsSpecificInfo(summary: string): boolean {
 
 function generateExample(type: string, scope: string, summary: string, original: string): string {
   // 自動生成メッセージ（Merge branch等）の検出
-  if (/^merge/i.test(summary) && !type) {
+  if (isMergeMessage(original) && !type) {
     return "feat(scope): developブランチの変更を統合する\n\n- チームメンバーの変更を取り込み\n- コンフリクトを解決";
   }
 

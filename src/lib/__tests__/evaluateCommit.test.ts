@@ -24,6 +24,16 @@ describe("evaluateCommit", () => {
     expect(r.score).toBe(55);
   });
 
+  test("Merge branch も55点", () => {
+    const r = evaluateCommit("Merge branch 'feature/xxx' into main");
+    expect(r.score).toBe(55);
+  });
+
+  test("Merge remote-tracking branch も55点", () => {
+    const r = evaluateCommit("Merge remote-tracking branch 'origin/main'");
+    expect(r.score).toBe(55);
+  });
+
   test("First commit は55点", () => {
     const r = evaluateCommit("initial commit");
     expect(r.score).toBe(55);

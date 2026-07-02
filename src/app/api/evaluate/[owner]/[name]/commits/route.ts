@@ -1,4 +1,4 @@
-import { evaluateCommit, CommitEvaluationResult } from "@/lib/evaluateCommit";
+import { evaluateCommit, isMergeMessage, CommitEvaluationResult } from "@/lib/evaluateCommit";
 import { fetchAllCommits } from "@/lib/github";
 import { logger } from "@/lib/logger";
 import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
@@ -122,6 +122,10 @@ async function onRuleEval(commit: import("@/lib/github").GitHubCommit): Promise<
 }
 
 async function onAiEval(item: EvaluatedCommit, commit: import("@/lib/github").GitHubCommit): Promise<EvaluatedCommit> {
+  if (isMergeMessage(commit.commit.message)) {
+    return item;
+  }
+
   const { combined } = await evaluateWithAi(commit.commit.message);
   return {
     ...item,

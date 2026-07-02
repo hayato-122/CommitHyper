@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { evaluateCommit } from "@/lib/evaluateCommit";
+import { evaluateCommit, isMergeMessage } from "@/lib/evaluateCommit";
 import { safeParseJson } from "@/lib/json";
 import { logger } from "@/lib/logger";
 import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
@@ -120,7 +120,8 @@ export async function GET(
 
 async function onRuleEval(commit: import("@/lib/github").GitHubCommit, _i: number, _total: number, repositoryId: string): Promise<SerializedCommit> {
   const evalResult = evaluateCommit(commit.commit.message);
-  const status = evalResult.score >= SCORE.GOOD ? "excellent" : "pending";
+  const status = isMergeMessage(commit.commit.message) ? "auto" :
+    evalResult.score >= SCORE.GOOD ? "excellent" : "pending";
 
   const dbCommit = await prisma.commit.create({
     data: {
@@ -165,6 +166,10 @@ async function onRuleEval(commit: import("@/lib/github").GitHubCommit, _i: numbe
 }
 
 async function onAiEval(item: SerializedCommit): Promise<SerializedCommit> {
+  if (isMergeMessage(item.message)) {
+    return item;
+  }
+
   const { combined } = await evaluateWithAi(item.message);
 
   await prisma.commit.update({
