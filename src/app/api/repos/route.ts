@@ -6,17 +6,31 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const res = await fetch("https://api.github.com/user/repos", {
-    headers: {
-      Authorization: `Bearer ${session.accessToken}`,
-      Accept: "application/vnd.github.v3+json",
-    },
-  });
+  const all: unknown[] = [];
+  let page = 1;
 
-  if (!res.ok) {
-    return Response.json(await res.json(), { status: res.status });
+  while (true) {
+    const res = await fetch(
+      `https://api.github.com/user/repos?per_page=100&page=${page}&sort=updated`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      },
+    );
+
+    if (!res.ok) {
+      return Response.json(await res.json(), { status: res.status });
+    }
+
+    const repos: unknown[] = await res.json();
+    if (repos.length === 0) break;
+
+    all.push(...repos);
+    if (repos.length < 100) break;
+    page++;
   }
 
-  const repos = await res.json();
-  return Response.json(repos);
+  return Response.json(all);
 }
