@@ -83,8 +83,7 @@ export function SplitPane({
   return (
     <div
       ref={containerRef}
-      className="flex flex-1 overflow-hidden select-none"
-      style={{ userSelect: dragging ? "none" : undefined }}
+      className={`flex flex-1 overflow-hidden ${dragging ? "select-none" : ""}`}
     >
       {/* Left panel */}
       <div
