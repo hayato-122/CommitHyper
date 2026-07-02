@@ -1,8 +1,9 @@
-import { evaluateCommit, combineWithAi, CommitEvaluationResult } from "@/lib/evaluateCommit";
-import { aiEvaluateCommit } from "@/lib/aiEvaluate";
+import { evaluateCommit, CommitEvaluationResult } from "@/lib/evaluateCommit";
 import { fetchAllCommits } from "@/lib/github";
+import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
+import { runSSEPipeline, evaluateWithAi } from "@/lib/ssePipeline";
 
-type EvaluatedCommit = {
+export type EvaluatedCommit = {
   sha: string;
   message: string;
   authorName: string;
@@ -15,8 +16,22 @@ type EvaluatedCommit = {
   aspectScores: Record<string, number>;
 };
 
-function sseEvent(event: string, data: unknown): string {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+const cache = new Map<string, { data: EvaluatedCommit[]; expiry: number }>();
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+function getCached(key: string): EvaluatedCommit[] | null {
+  const entry = cache.get(key);
+  if (entry && Date.now() < entry.expiry) return entry.data;
+  cache.delete(key);
+  return null;
+}
+
+function setCache(key: string, data: EvaluatedCommit[]) {
+  cache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
+  if (cache.size > 100) {
+    const oldest = cache.keys().next().value;
+    if (oldest) cache.delete(oldest);
+  }
 }
 
 function toEvaluatedCommit(
@@ -35,24 +50,6 @@ function toEvaluatedCommit(
     exampleMessage: result.exampleMessage,
     aspectScores: result.aspectScores,
   };
-}
-
-const cache = new Map<string, { data: EvaluatedCommit[]; expiry: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000;
-
-function getCached(key: string): EvaluatedCommit[] | null {
-  const entry = cache.get(key);
-  if (entry && Date.now() < entry.expiry) return entry.data;
-  cache.delete(key);
-  return null;
-}
-
-function setCache(key: string, data: EvaluatedCommit[]) {
-  cache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
-  if (cache.size > 100) {
-    const oldest = cache.keys().next().value;
-    if (oldest) cache.delete(oldest);
-  }
 }
 
 export async function GET(
@@ -86,108 +83,52 @@ export async function GET(
     if (cached) return Response.json(cached);
   }
 
-  const encoder = new TextEncoder();
-  let isStreamCancelled = false;
+  const { stream, sse } = createSSEStream();
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (event: string, data: unknown) => {
-        if (isStreamCancelled) return;
-        try {
-          controller.enqueue(encoder.encode(sseEvent(event, data)));
-        } catch {
-          isStreamCancelled = true;
-        }
-      };
+  (async () => {
+    try {
+      sse.send("progress", { phase: "fetch", current: 0, total: 0, message: "GitHubからコミットを取得中..." });
+      const githubCommits = await fetchAllCommits(owner, name, token, branch, limit);
+      sse.send("progress", { phase: "fetch_done", current: githubCommits.length, total: githubCommits.length, message: `${githubCommits.length}件のコミットを取得完了` });
 
-      try {
-        send("progress", { phase: "fetch", current: 0, total: 0, message: "GitHubからコミットを取得中..." });
-        const githubCommits = await fetchAllCommits(owner, name, token, branch, limit);
-        send("progress", { phase: "fetch_done", current: githubCommits.length, total: githubCommits.length, message: `${githubCommits.length}件のコミットを取得完了` });
+      const { items } = await runSSEPipeline(
+        githubCommits,
+        sse.send,
+        (commit, i, total) => onRuleEval(commit, i, total),
+        (item, commit, i, total) => onAiEval(item, commit, i, total),
+        (item) => item.score,
+      );
 
-        send("phase", { name: "rule", message: "ルールベース評価中..." });
-        const ruleResults: { commit: typeof githubCommits[number]; result: CommitEvaluationResult }[] = [];
-
-        for (let i = 0; i < githubCommits.length; i++) {
-          const c = githubCommits[i];
-          const ruleResult = evaluateCommit(c.commit.message);
-          ruleResults.push({ commit: c, result: ruleResult });
-          send("progress", { phase: "rule", current: i + 1, total: githubCommits.length });
-        }
-
-        const ruleCommits = ruleResults.map((r) => toEvaluatedCommit(r.commit, r.result));
-        const totalInitial = ruleCommits.reduce((s, c) => s + c.score, 0);
-        const initialAvg = Math.round(totalInitial / ruleCommits.length);
-
-        send("rule_complete", {
-          commits: ruleCommits,
-          totalCount: ruleCommits.length,
-          initialAvg,
-          estimatedAiSeconds: Math.round(ruleCommits.length * 1.5),
-        });
-
-        send("phase", { name: "ai", message: "AI評価中..." });
-        const startTime = Date.now();
-        const aiResults: EvaluatedCommit[] = [];
-
-        for (let i = 0; i < ruleResults.length; i++) {
-          if (isStreamCancelled) break;
-
-          const { commit, result: ruleResult } = ruleResults[i];
-          const aiResult = ruleResult.score >= 100 ? null : await aiEvaluateCommit(commit.commit.message);
-          // レート制限回避のためAPI呼び出し間に待機
-          if (i < ruleResults.length - 1) await new Promise((r) => setTimeout(r, 400));
-          const combined = combineWithAi(ruleResult, aiResult);
-
-          aiResults.push(toEvaluatedCommit(commit, combined));
-
-          const elapsed = (Date.now() - startTime) / 1000;
-          const perItem = elapsed / (i + 1);
-          const remaining = Math.round(perItem * (ruleResults.length - i - 1));
-
-          send("ai_progress", {
-            current: i + 1,
-            total: ruleResults.length,
-            currentMessage: commit.commit.message.slice(0, 60),
-            score: combined.score,
-            estimatedSecondsRemaining: remaining,
-          });
-        }
-
-        const totalCurrent = aiResults.reduce((s, c) => s + c.score, 0);
-        const currentAvg = Math.round(totalCurrent / aiResults.length);
-
-        setCache(cacheKey, aiResults);
-
-        send("ai_complete", {
-          commits: aiResults,
-          totalCount: aiResults.length,
-          initialAvg,
-          currentAvg,
-        });
-
-        controller.close();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-
-        if (message.includes("404")) {
-          send("error", { error: "このリポジトリは存在しないか、非公開です" });
-        } else {
-          console.error("[evaluate/commits] SSE error:", error);
-          send("error", { message: "分析中にエラーが発生しました" });
-        }
-
-        controller.close();
+      setCache(cacheKey, items);
+      sse.close();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("404")) {
+        sse.error({ error: "このリポジトリは存在しないか、非公開です" });
+      } else {
+        console.error("[evaluate/commits] SSE error:", error);
+        sse.error({ message: "分析中にエラーが発生しました" });
       }
-    },
-  });
+    }
+  })();
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  return new Response(stream, { headers: SSE_RESPONSE_HEADERS });
+}
+
+async function onRuleEval(commit: import("@/lib/github").GitHubCommit): Promise<EvaluatedCommit> {
+  const ruleResult = evaluateCommit(commit.commit.message);
+  return toEvaluatedCommit(commit, ruleResult);
+}
+
+async function onAiEval(item: EvaluatedCommit, commit: import("@/lib/github").GitHubCommit): Promise<EvaluatedCommit> {
+  const { combined } = await evaluateWithAi(commit.commit.message);
+  return {
+    ...item,
+    score: combined.score,
+    rank: combined.rank,
+    issues: combined.issues,
+    suggestions: combined.suggestions,
+    exampleMessage: combined.exampleMessage,
+    aspectScores: combined.aspectScores,
+  };
 }
