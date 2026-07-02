@@ -1,3 +1,5 @@
+import { SPECIFIC_PATTERNS } from "@/lib/specificPatterns";
+
 // ランク閾値（一元管理）
 export const SCORE = {
   EXCELLENT: 90,
@@ -327,46 +329,8 @@ function isJapanese(text: string): boolean {
 }
 
 function containsSpecificInfo(summary: string): boolean {
-  const specificPatterns = [
-    /ログイン/, /認証/, /ボタン/, /画面/, /ページ/,
-    /フォーム/, /一覧/, /検索/, /フィルター/, /ソート/,
-    /ダッシュボード/, /サイドバー/, /ヘッダー/, /フッター/,
-    /モーダル/, /ダイアログ/, /トースト/, /ツールチップ/,
-    /テーブル/, /カード/, /タブ/, /メニュー/, /ドロップダウン/,
-    /ナビゲーション/, /バリデーション/,
-    /アップロード/, /ダウンロード/, /エクスポート/, /インポート/,
-    /通知/, /メール/, /パスワード/, /セッション/, /トークン/,
-    /権限/, /ロール/, /プロフィール/, /アバター/,
-    /プロジェクト/, /初期化/, /セットアップ/, /環境/, /設定/,
-    /導入/, /移行/, /構成/, /有効/, /無効/, /対応/, /統合/,
-    /リリース/, /バージョン/, /更新/, /追加/, /削除/, /修正/,
-    /ファイル/, /フォルダ/, /ディレクトリ/, /パッケージ/, /import/,
-    /コンポーネント/, /ページ/, /レイアウト/, /テンプレート/,
-    /auth|login|logout|signup|register|oauth|session|token|password/i,
-    /button|form|input|select|checkbox|radio|toggle|switch|slider/i,
-    /table|grid|list|card|modal|dialog|toast|tooltip|popover|drawer/i,
-    /navbar|sidebar|header|footer|layout|breadcrumb|pagination/i,
-    /search|filter|sort|paginate|scroll|resize|drag|drop/i,
-    /upload|download|export|csv|pdf|image|thumbnail|preview/i,
-    /notification|alert|banner|badge|progress|spinner|skeleton/i,
-    /API|SDK|REST|GraphQL|WebSocket|SSE|OAuth|JWT|CORS/i,
-    /DB|SQL|NoSQL|Redis|Prisma|Postgres|MySQL|MongoDB|Supabase/i,
-    /middleware|proxy|route|handler|controller|service|repository/i,
-    /migration|seed|schema|model|relation|index|query/i,
-    /\.env|\.config|\.json|\.yml|\.yaml|\.toml|\.lock/,
-    /package\.json|tsconfig|eslint|prettier|tailwind\.config/i,
-    /Dockerfile|docker-compose|\.github|workflows|CI|CD/i,
-    /readme|changelog|contributing|license|\.md/i,
-    /バグ/, /クラッシュ/, /メモリリーク/, /デッドロック/,
-    /N\+1/, /パフォーマンス/, /レイテンシ/, /タイムアウト/,
-    /リファクタリング/, /テスト/, /カバレッジ/, /型定義/,
-    /依存関係/, /バージョンアップ/, /アップグレード/,
-    /ビルド/, /デプロイ/, /リリース/, /ロールバック/,
-    /エラーハンドリング/, /エラーメッセージ/, /ログ/, /デバッグ/,
-    /アクセシビリティ/, /レスポンシブ/, /ダークモード/, /テーマ/,
-  ];
   let matchedLength = 0;
-  for (const p of specificPatterns) {
+  for (const p of SPECIFIC_PATTERNS) {
     const m = summary.match(p);
     if (m) matchedLength += m[0].length;
   }
