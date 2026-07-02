@@ -1,6 +1,6 @@
-import { middlewareAuth } from "@/auth.config";
+import { proxyAuth } from "@/auth.config";
 
-export default middlewareAuth((request) => {
+export default proxyAuth((request) => {
   if (!request.auth) {
     return Response.redirect(new URL("/login", request.url));
   }

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, MessageSquareText } from "lucide-react";
-import { middlewareAuth } from "@/auth.config";
+import { proxyAuth } from "@/auth.config";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
 import { QuickEvaluateForm } from "@/components/QuickEvaluateForm";
@@ -11,7 +11,7 @@ import { CTASection } from "@/components/CTASection";
 import { LandingFooter } from "@/components/LandingFooter";
 
 export default async function Home() {
-  const session = await middlewareAuth();
+  const session = await proxyAuth();
   if (session?.user) {
     redirect("/dashboard");
   }
