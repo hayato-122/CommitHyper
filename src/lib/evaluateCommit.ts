@@ -458,12 +458,4 @@ function generateExpandedExample(type: string, scope: string): string {
   };
 
   return templates[type] || `${type}(${scope}): ${scope}に関する具体的な変更内容`;
-;
-
-  const candidates = templates[type];
-  if (candidates && candidates.length > 0) {
-    return candidates[0];
-  }
-
-  return `${type}(${scope}): ${scope}に関する具体的な変更内容`;
 }
