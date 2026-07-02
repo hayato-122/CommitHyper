@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { SCORE } from "@/lib/evaluateCommit";
 import { safeParseJson } from "@/lib/json";
+import { CandidatesQuerySchema } from "@/lib/validation";
 import { Prisma } from "@prisma/client";
 
 export async function GET(
@@ -15,9 +16,8 @@ export async function GET(
 
   const { owner, name } = await params;
   const url = new URL(request.url);
-  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
-  const sortBy = url.searchParams.get("sortBy") || "score";
-  const sortDir = url.searchParams.get("sortDir") || "asc";
+  const query = CandidatesQuerySchema.parse(Object.fromEntries(url.searchParams));
+  const { page, sortBy, sortDir } = query;
   const perPage = 3;
 
   const repository = await prisma.repository.findFirst({

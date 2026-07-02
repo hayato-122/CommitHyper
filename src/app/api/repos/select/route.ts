@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { SelectRepoSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -8,11 +9,12 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { githubRepoId, name, owner, fullName, isPrivate } = body;
-
-  if (!githubRepoId || !name || !owner || !fullName) {
-    return Response.json({ error: "Missing fields" }, { status: 400 });
+  const parsed = SelectRepoSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ error: "Invalid fields", details: parsed.error.flatten() }, { status: 400 });
   }
+
+  const { githubRepoId, name, owner, fullName, isPrivate } = parsed.data;
 
   // 既に選択済みか確認
   const existing = await prisma.repository.findFirst({

@@ -1,13 +1,15 @@
 import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
+import { ImproveMessageSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const improvedMessage = body.message as string;
-
-  if (!improvedMessage || improvedMessage.trim().length === 0) {
-    return Response.json({ error: "Message is required" }, { status: 400 });
+  const parsed = ImproveMessageSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ error: "Message is required", details: parsed.error.flatten() }, { status: 400 });
   }
+
+  const improvedMessage = parsed.data.message;
 
   const ruleResult = evaluateCommit(improvedMessage);
   const aiResult = await aiEvaluateCommit(improvedMessage);

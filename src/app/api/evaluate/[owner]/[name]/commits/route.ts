@@ -3,6 +3,7 @@ import { fetchAllCommits } from "@/lib/github";
 import { logger } from "@/lib/logger";
 import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
 import { runSSEPipeline, evaluateWithAi } from "@/lib/ssePipeline";
+import { EvaluateCommitsQuerySchema } from "@/lib/validation";
 
 export type EvaluatedCommit = {
   sha: string;
@@ -67,14 +68,13 @@ export async function GET(
 
   const { owner, name } = await params;
   const url = new URL(request.url);
-  const branch = url.searchParams.get("branch") || undefined;
-  const refresh = url.searchParams.get("refresh") === "true";
-  const limitParam = url.searchParams.get("limit");
-  const limit = limitParam ? parseInt(limitParam, 10) : 200;
+  const query = EvaluateCommitsQuerySchema.parse(Object.fromEntries(url.searchParams));
+  const branch = query.branch;
+  const refresh = query.refresh;
+  const limit = query.limit;
+  const isStatusCheck = query.status;
 
   const cacheKey = `${owner}/${name}/${branch || "default"}`;
-
-  const isStatusCheck = url.searchParams.get("status") === "true";
   if (isStatusCheck) {
     return Response.json({ cached: !refresh && getCached(cacheKey) !== null });
   }

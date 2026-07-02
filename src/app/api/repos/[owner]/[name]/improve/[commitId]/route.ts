@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 import { safeParseJson } from "@/lib/json";
+import { ImproveMessageSchema } from "@/lib/validation";
 
 export async function GET(
   _request: Request,
@@ -57,11 +58,12 @@ export async function POST(
 
   const { commitId } = await params;
   const body = await request.json();
-  const improvedMessage = body.message as string;
-
-  if (!improvedMessage || improvedMessage.trim().length === 0) {
-    return Response.json({ error: "Message is required" }, { status: 400 });
+  const parsed = ImproveMessageSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ error: "Message is required", details: parsed.error.flatten() }, { status: 400 });
   }
+
+  const improvedMessage = parsed.data.message;
 
   const commit = await prisma.commit.findUnique({
     where: { id: commitId },
@@ -70,7 +72,6 @@ export async function POST(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
-  // ルール評価とAI評価を並列実行
   const ruleResult = evaluateCommit(improvedMessage);
   const aiResult = await aiEvaluateCommit(improvedMessage);
 
@@ -105,11 +106,12 @@ export async function PUT(
 
   const { commitId } = await params;
   const body = await request.json();
-  const improvedMessage = body.message as string;
-
-  if (!improvedMessage || improvedMessage.trim().length === 0) {
-    return Response.json({ error: "Message is required" }, { status: 400 });
+  const parsed = ImproveMessageSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ error: "Message is required", details: parsed.error.flatten() }, { status: 400 });
   }
+
+  const improvedMessage = parsed.data.message;
 
   const commit = await prisma.commit.findUnique({
     where: { id: commitId },
