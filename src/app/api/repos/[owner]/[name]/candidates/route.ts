@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { SCORE } from "@/lib/evaluateCommit";
+import { safeParseJson } from "@/lib/json";
 import { Prisma } from "@prisma/client";
 
 export async function GET(
@@ -53,7 +54,7 @@ export async function GET(
   const commits = rawCommits.map((c) => ({
     ...c,
     firstIssue: c.evaluations?.[0]?.issues
-      ? (JSON.parse(c.evaluations[0].issues as string) as string[])[0] ?? null
+      ? safeParseJson<string>(c.evaluations[0].issues)[0] ?? null
       : null,
     exampleMessage: c.evaluations?.[0]?.exampleMessage ?? null,
   }));

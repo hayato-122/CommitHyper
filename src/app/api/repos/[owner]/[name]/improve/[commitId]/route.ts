@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
+import { safeParseJson } from "@/lib/json";
 
 export async function GET(
   _request: Request,
@@ -35,8 +36,8 @@ export async function GET(
   return Response.json({
     score: evaluation.score,
     rank: evaluation.rank,
-    issues: JSON.parse(evaluation.issues as string) as string[],
-    suggestions: JSON.parse(evaluation.suggestions as string) as string[],
+    issues: safeParseJson<string>(evaluation.issues),
+    suggestions: safeParseJson<string>(evaluation.suggestions),
     exampleMessage: evaluation.exampleMessage,
     aspectScores,
   });

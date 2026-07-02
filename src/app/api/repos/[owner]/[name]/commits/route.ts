@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
+import { safeParseJson } from "@/lib/json";
 
 type GitHubCommit = {
   sha: string;
@@ -136,7 +137,7 @@ export async function GET(
         currentScore: c.currentScore,
         status: c.status,
         firstIssue: c.evaluations?.[0]?.issues
-          ? (JSON.parse(c.evaluations[0].issues as string) as string[])[0] ?? null
+          ? safeParseJson<string>(c.evaluations[0].issues)[0] ?? null
           : null,
         exampleMessage: c.evaluations?.[0]?.exampleMessage ?? null,
         aspectScores: c.evaluations?.[0]?.aspectScores ?? null,
