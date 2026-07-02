@@ -29,8 +29,9 @@ export type AiSkippedReason =
   | { reason: "error"; message: string }
   | { reason: "quota_exceeded" };
 
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_API_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const EVALUATION_PROMPT = [
   "あなたはコミットメッセージ評価の専門家です。",
