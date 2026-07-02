@@ -259,6 +259,8 @@ export async function GET(
           const aiResult = ruleResult.score >= 100
             ? null
             : await aiEvaluateCommit(sc.message);
+          // レート制限回避のためAPI呼び出し間に待機
+          if (i < savedCommits.length - 1) await new Promise((r) => setTimeout(r, 400));
 
           if (aiResult) {
             const combined = combineWithAi(ruleResult, aiResult);

@@ -28,7 +28,7 @@ export type AiSkippedReason =
   | { reason: "quota_exceeded" };
 
 const GEMINI_API_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 const EVALUATION_PROMPT = [
   "あなたはコミットメッセージ評価の専門家です。",
@@ -104,6 +104,10 @@ const EVALUATION_PROMPT = [
  * コミットメッセージの観点3（具体性）・観点4（Why）をAI（Gemini Flash）で評価する
  * GEMINI_API_KEY が設定されていない場合は null を返す
  */
+async function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function aiEvaluateCommit(
   message: string,
 ): Promise<AiEvaluationResult | null> {
@@ -113,91 +117,127 @@ export async function aiEvaluateCommit(
     return null;
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const maxRetries = 3;
 
-    const response = await fetch(`${GEMINI_API_ENDPOINT}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: EVALUATION_PROMPT },
-              {
-                text: `評価対象のコミットメッセージ:\n\`\`\`\n${message}\n\`\`\``,
-              },
-            ],
+  let lastError: string | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${GEMINI_API_ENDPOINT}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: EVALUATION_PROMPT },
+                {
+                  text: `評価対象のコミットメッセージ:\n\`\`\`\n${message}\n\`\`\``,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 1024,
           },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 1024,
-        },
-      }),
-    });
-    clearTimeout(timeoutId);
+        }),
+      });
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => "unknown");
+      if (response.status === 429) {
+        const retryAfter = parseInt(
+          response.headers.get("Retry-After") ?? "",
+          10,
+        );
+        const waitMs = Math.min(
+          (retryAfter || (attempt + 1) * 3) * 1000,
+          15000,
+        );
+        console.warn(
+          `[aiEvaluate] Rate limited (429), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`,
+        );
+        await delay(waitMs);
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "unknown");
+        lastError = `Gemini API error: ${response.status}`;
+        console.error(
+          `[aiEvaluate] Gemini API error: ${response.status} ${response.statusText}`,
+          errorBody.slice(0, 500),
+        );
+        await delay((attempt + 1) * 2000);
+        continue;
+      }
+
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        lastError = "Empty response from Gemini API";
+        console.error("[aiEvaluate] Empty response from Gemini API");
+        await delay((attempt + 1) * 1000);
+        continue;
+      }
+
+      const jsonStr = extractJson(text);
+      if (!jsonStr) {
+        lastError = "No JSON found in Gemini response";
+        console.error(
+          "[aiEvaluate] No JSON found in Gemini response:",
+          text.slice(0, 300),
+        );
+        await delay((attempt + 1) * 1000);
+        continue;
+      }
+
+      const parsed = JSON.parse(jsonStr);
+
+      const validSummaryScore = Math.max(0, Math.min(
+        20,
+        typeof parsed.summaryScore === "number" ? parsed.summaryScore : 0,
+      ));
+      const validWhyScore = Math.max(0, Math.min(
+        15,
+        typeof parsed.whyScore === "number" ? parsed.whyScore : 0,
+      ));
+
+      const suggestedScope = typeof parsed.suggestedScope === "string"
+        ? parsed.suggestedScope.trim()
+        : "";
+
+      return {
+        score: validSummaryScore + validWhyScore,
+        summaryScore: validSummaryScore,
+        whyScore: validWhyScore,
+        suggestedScope,
+        issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 3) : [],
+        suggestions: Array.isArray(parsed.suggestions)
+          ? parsed.suggestions.slice(0, 3)
+          : [],
+        exampleMessage: typeof parsed.exampleMessage === "string"
+          ? parsed.exampleMessage
+          : message,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Unknown error";
       console.error(
-        `[aiEvaluate] Gemini API error: ${response.status} ${response.statusText}`,
-        errorBody.slice(0, 500),
+        `[aiEvaluate] Attempt ${attempt + 1}/${maxRetries} failed:`,
+        lastError,
       );
-      return null;
+      if (attempt < maxRetries - 1) {
+        await delay((attempt + 1) * 2000);
+      }
     }
-
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-      console.error("[aiEvaluate] Empty response from Gemini API");
-      return null;
-    }
-
-    const jsonStr = extractJson(text);
-    if (!jsonStr) {
-      console.error(
-        "[aiEvaluate] No JSON found in Gemini response:",
-        text.slice(0, 300),
-      );
-      return null;
-    }
-
-    const parsed = JSON.parse(jsonStr);
-
-    // バリデーション
-    const validSummaryScore = Math.max(0, Math.min(
-      20,
-      typeof parsed.summaryScore === "number" ? parsed.summaryScore : 0,
-    ));
-    const validWhyScore = Math.max(0, Math.min(
-      15,
-      typeof parsed.whyScore === "number" ? parsed.whyScore : 0,
-    ));
-
-    const suggestedScope = typeof parsed.suggestedScope === "string"
-      ? parsed.suggestedScope.trim()
-      : "";
-
-    return {
-      score: validSummaryScore + validWhyScore,
-      summaryScore: validSummaryScore,
-      whyScore: validWhyScore,
-      suggestedScope,
-      issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 3) : [],
-      suggestions: Array.isArray(parsed.suggestions)
-        ? parsed.suggestions.slice(0, 3)
-        : [],
-      exampleMessage: typeof parsed.exampleMessage === "string"
-        ? parsed.exampleMessage
-        : message,
-    };
-  } catch (error) {
-    console.error("[aiEvaluate] Failed to evaluate commit:", error);
-    return null;
   }
+
+  console.error("[aiEvaluate] All attempts failed:", lastError);
+  return null;
 }
 
 function extractJson(text: string): string | null {

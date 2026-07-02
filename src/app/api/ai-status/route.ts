@@ -15,6 +15,6 @@ export async function GET() {
     available: true,
     reason: null,
     message: null,
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
   });
 }

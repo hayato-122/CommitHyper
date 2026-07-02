@@ -44,6 +44,18 @@ instructions.md
 /.codewhale/
 /.claude/
 
+# opencode config (contains tokens)
+opencode.json
+
+# Serena embedding index
+/.serena/
+
+# MCP profile switcher
+/mcp.ps1
+
+# stray artifact
+/0
+
 # DESIGNDOCS
 DESIGN.md
 theme.css
