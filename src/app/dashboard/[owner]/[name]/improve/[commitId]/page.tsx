@@ -69,7 +69,10 @@ export default function ImprovePage() {
   const [showDiff, setShowDiff] = useState(false);
   const [guideTab, setGuideTab] = useState<"manual" | "agent">("manual");
   const [clonedStatus, setClonedStatus] = useState<"cloned" | "not_cloned">("cloned");
-  const [branchName, setBranchName] = useState("");
+  const [branchName] = useState(() => {
+    if (typeof window === "undefined") return "main";
+    return localStorage.getItem(`branch:${owner}/${name}`) || "main";
+  });
   const [scriptCopied, setScriptCopied] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<{ available: boolean; message?: string } | null>(null);
