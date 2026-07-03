@@ -69,7 +69,10 @@ export default function ImprovePage() {
   const [showDiff, setShowDiff] = useState(false);
   const [guideTab, setGuideTab] = useState<"manual" | "agent">("manual");
   const [clonedStatus, setClonedStatus] = useState<"cloned" | "not_cloned">("cloned");
-  const [branchName, setBranchName] = useState("");
+  const [branchName] = useState(() => {
+    if (typeof window === "undefined") return "main";
+    return localStorage.getItem(`branch:${owner}/${name}`) || "main";
+  });
   const [scriptCopied, setScriptCopied] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<{ available: boolean; message?: string } | null>(null);
@@ -453,19 +456,6 @@ git clone git@github.com:${owner}/${name}.git
                             まだクローンしていない
                           </button>
                         </div>
-                      </div>
-
-                      {/* ブランチ名入力 */}
-                      <div className="mb-3 rounded-xl border border-mist bg-snow p-4">
-                        <p className="mb-2 text-caption font-medium text-zinc-500">
-                          ブランチ名
-                        </p>
-                        <input
-                          value={branchName}
-                          onChange={(e) => setBranchName(e.target.value)}
-                          placeholder="main"
-                          className="w-full rounded-lg border border-mist bg-white px-3 py-2 font-mono text-body-sm text-midnight-ink placeholder:text-fog-gray focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20"
-                        />
                       </div>
 
                       {/* タブ切り替え */}

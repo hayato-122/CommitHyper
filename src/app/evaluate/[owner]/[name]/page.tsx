@@ -11,7 +11,7 @@ import { AnalyzeLoading } from "@/components/AnalyzeLoading";
 import { useSSEAnalysis } from "@/hooks/useSSEAnalysis";
 import { SCORE } from "@/lib/evaluateCommit";
 import { exportMarkdown, downloadFile, type ExportCommit } from "@/lib/export";
-import { ArrowLeft, ArrowUpDown, Download } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, Download, AlertTriangle, RotateCw } from "lucide-react";
 
 type AspectScores = {
   format: number;
@@ -47,8 +47,38 @@ export default function EvaluatePage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<"score" | "date">("score");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState("default");
+  const [startable, setStartable] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { analyzeState, startAnalysis } = useSSEAnalysis();
+
+  const loginLink = (
+    <Link href="/login" className="rounded-2xl bg-brand-teal px-5 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110">
+      ログイン
+    </Link>
+  );
+
+  const LOCAL_CACHE_TTL = 24 * 60 * 60 * 1000;
+  function cacheKey(branch: string) { return `evaluate:${owner}/${name}/${branch}`; }
+  function loadLocalCache(branch: string): EvalCommit[] | null {
+    try {
+      const raw = localStorage.getItem(cacheKey(branch));
+      if (!raw) return null;
+      const { timestamp, commits } = JSON.parse(raw);
+      if (Date.now() - timestamp > LOCAL_CACHE_TTL) {
+        localStorage.removeItem(cacheKey(branch));
+        return null;
+      }
+      return commits;
+    } catch { return null; }
+  }
+  function saveLocalCache(branch: string, commits: EvalCommit[]) {
+    try {
+      localStorage.setItem(cacheKey(branch), JSON.stringify({ timestamp: Date.now(), commits }));
+    } catch { /* localStorage full */ }
+  }
 
   function handleExportMd() {
     const ownerName = `${owner}/${name}`;
@@ -70,51 +100,94 @@ export default function EvaluatePage() {
     setError("");
 
     try {
-      const statusRes = await fetch(
-        `/api/evaluate/${owner}/${name}/commits?status=true`,
-      );
-      if (!statusRes.ok) {
-        const data = await statusRes.json().catch(() => ({}));
-        throw new Error(data.error || `エラー (${statusRes.status})`);
-      }
-      const status = await statusRes.json();
-
-      if (status.cached) {
-        const res = await fetch(`/api/evaluate/${owner}/${name}/commits`);
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `エラー (${res.status})`);
+      const branchesRes = await fetch(`/api/evaluate/${owner}/${name}/branches`);
+      if (branchesRes.ok) {
+        const data = await branchesRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setBranches(data);
+          setSelectedBranch(data[0]);
         }
-        const data: EvalCommit[] = await res.json();
-        setAllCommits(data);
-        setLoading(false);
-      } else {
-        const url = `/api/evaluate/${owner}/${name}/commits?refresh=true`;
-        startAnalysis(url, {
-          onRuleComplete(data) {
-            const d = data as { commits: EvalCommit[] };
-            setAllCommits(d.commits);
-          },
-          onAIComplete(data) {
-            const d = data as { commits: EvalCommit[] };
-            setAllCommits(d.commits);
-            setLoading(false);
-          },
-          onError() {
-            setError("分析に失敗しました。もう一度お試しください。");
-            setLoading(false);
-          },
-        });
       }
+      setStartable(true);
+      setLoading(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setLoading(false);
     }
-  }, [owner, name, startAnalysis]);
+  }, [owner, name]);
 
   useEffect(() => {
     init();
   }, [init]);
+
+  async function handleStartAnalysis() {
+    setStartable(false);
+    setLoading(true);
+
+    const localCache = loadLocalCache(selectedBranch);
+    if (localCache) {
+      setAllCommits(localCache);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const qs = new URLSearchParams({ status: "true", branch: selectedBranch });
+      const statusRes = await fetch(`/api/evaluate/${owner}/${name}/commits?${qs}`);
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        if (status.cached) {
+          const res = await fetch(`/api/evaluate/${owner}/${name}/commits?branch=${encodeURIComponent(selectedBranch)}`);
+          if (res.ok) {
+            const data: EvalCommit[] = await res.json();
+            saveLocalCache(selectedBranch, data);
+            setAllCommits(data);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+    } catch { /* fall through to SSE */ }
+
+    setLoading(false);
+    const params = new URLSearchParams({ refresh: "true" });
+    if (selectedBranch && selectedBranch !== "default") params.set("branch", selectedBranch);
+    const url = `/api/evaluate/${owner}/${name}/commits?${params}`;
+    startAnalysis(url, {
+      onRuleComplete(data) {
+        setAllCommits((data as { commits: EvalCommit[] }).commits);
+      },
+      onAIComplete(data) {
+        const d = (data as { commits: EvalCommit[] }).commits;
+        setAllCommits(d);
+        saveLocalCache(selectedBranch, d);
+      },
+      onError() {
+        setError("分析に失敗しました。もう一度お試しください。");
+      },
+    });
+  }
+
+  function handleRefresh() {
+    setRefreshing(true);
+    localStorage.removeItem(cacheKey(selectedBranch));
+    const params = new URLSearchParams({ refresh: "true" });
+    if (selectedBranch && selectedBranch !== "default") params.set("branch", selectedBranch);
+    startAnalysis(`/api/evaluate/${owner}/${name}/commits?${params}`, {
+      onRuleComplete(data) {
+        setAllCommits((data as { commits: EvalCommit[] }).commits);
+      },
+      onAIComplete(data) {
+        const d = (data as { commits: EvalCommit[] }).commits;
+        setAllCommits(d);
+        saveLocalCache(selectedBranch, d);
+        setRefreshing(false);
+      },
+      onError() {
+        setRefreshing(false);
+      },
+    });
+  }
 
   function sortCommits(list: EvalCommit[]) {
     return [...list].sort((a, b) => {
@@ -152,12 +225,68 @@ export default function EvaluatePage() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-pearl">
-        <Header />
+        <Header right={loginLink} />
         <main className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
             <p className="text-body text-zinc-500">
-              {owner}/{name} のコミットを分析中...
+              {owner}/{name} の情報を読み込み中...
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (startable) {
+    return (
+      <div className="flex min-h-screen flex-col bg-pearl">
+        <Header
+          left={
+            <>
+              <div className="h-4 w-px bg-mist" />
+              <Link href="/" className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600">
+                <ArrowLeft className="h-3 w-3" />
+                <span className="hidden md:inline">トップに戻る</span>
+              </Link>
+              <div className="hidden md:block h-4 w-px bg-mist" />
+              <span className="text-sm font-medium text-zinc-600 truncate max-w-[120px] md:max-w-none">
+                {owner}/{name}
+              </span>
+            </>
+          }
+          right={loginLink}
+        />
+        <main className="flex flex-1 items-center justify-center px-6">
+          <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 text-center shadow-subtle">
+            <h1 className="text-heading-sm font-semibold text-midnight-ink">
+              {owner}/{name}
+            </h1>
+            <p className="mt-2 text-body-sm text-zinc-500">
+              分析するブランチを選択してください。
+            </p>
+            <div className="mt-6">
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="w-full rounded-xl border border-mist bg-white px-4 py-3 text-body-sm text-zinc-700 focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20"
+              >
+                {branches.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleStartAnalysis}
+              className="mt-6 w-full rounded-2xl bg-brand-teal px-6 py-3 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+            >
+              分析を開始する
+            </button>
+            <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-amber-600">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              未ログインのため最大200件まで表示されます
             </p>
           </div>
         </main>
@@ -168,7 +297,7 @@ export default function EvaluatePage() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-pearl">
-        <Header />
+        <Header right={loginLink} />
         <main className="flex flex-1 items-center justify-center px-6">
           <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 text-center shadow-subtle">
             <p className="text-heading-lg font-semibold text-zinc-300">!</p>
@@ -201,11 +330,26 @@ export default function EvaluatePage() {
               <span className="hidden md:inline">トップに戻る</span>
             </Link>
             <div className="hidden md:block h-4 w-px bg-mist" />
-            <span className="text-sm font-medium text-zinc-600 truncate max-w-[120px] md:max-w-none">
+            <span className="text-sm font-medium text-zinc-600 truncate max-w-[100px] md:max-w-none">
               {owner}/{name}
             </span>
+            {branches.length > 0 && (
+              <>
+                <div className="hidden md:block h-4 w-px bg-mist" />
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => { setSelectedBranch(e.target.value); setAllCommits([]); setStartable(true); }}
+                  className="max-w-[80px] md:max-w-[140px] truncate rounded-lg border border-mist bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                >
+                  {branches.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </>
+            )}
           </>
         }
+        right={loginLink}
       />
 
       <div className="flex flex-1 flex-col md:flex-row">
@@ -262,6 +406,14 @@ export default function EvaluatePage() {
               >
                 <Download className="h-3.5 w-3.5" />
                 Markdownで保存
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <RotateCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                再分析
               </button>
             </div>
           </div>
@@ -343,6 +495,8 @@ export default function EvaluatePage() {
           </div>
           <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 text-center">
             <p className="text-xs text-zinc-400">
+              未ログインのため最大200件まで表示されます。
+              <br />
               ログインすると自分のリポジトリで
               <br />
               XPや成長ゲージが使えます

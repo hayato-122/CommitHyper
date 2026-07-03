@@ -1,5 +1,3 @@
-import { aiEvaluateCommit } from "@/lib/aiEvaluate";
-
 export async function GET() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.trim().length === 0) {
