@@ -12,8 +12,8 @@ export async function evaluateWithAi(
   return { combined, aiResult };
 }
 
-const BATCH_SIZE = 10;
-const RPM_DELAY_MS = 1000;
+const BATCH_SIZE = 3;
+const RPM_DELAY_MS = 4000;
 
 export async function runSSEPipeline<T>(
   commits: GitHubCommit[],
@@ -69,11 +69,12 @@ export async function runSSEPipeline<T>(
     const batchMessages = commits.slice(batchStart, batchEnd).map((c) => c.commit.message);
 
     const results = await aiEvaluateBatch(batchMessages, options);
-    const allNull = results.every((r) => r === null);
 
-    if (allNull) {
-      if (isAiRpdExceeded()) rpdExceeded = true;
-      break;
+    if (results.every((r) => r === null)) {
+      if (isAiRpdExceeded()) {
+        rpdExceeded = true;
+        break;
+      }
     }
 
     if (batchEnd < ruleItems.length) {
