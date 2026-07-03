@@ -71,6 +71,7 @@ export default function DashboardPage() {
     return localStorage.getItem(branchKey) || "default";
   });
   const [sortBy, setSortBy] = useState<"score" | "date">("score");
+  const [startable, setStartable] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const { analyzeState, startAnalysis } = useSSEAnalysis();
@@ -161,24 +162,8 @@ export default function DashboardPage() {
         await loadAllCommits();
         setLoading(false);
       } else {
-        const initialBranch = Array.isArray(branchesData) && branchesData.length > 0 ? branchesData[0] : undefined;
-        const params = new URLSearchParams({ refresh: "true" });
-        if (initialBranch && initialBranch !== "default") params.set("branch", initialBranch);
-        const url = `/api/repos/${owner}/${name}/commits?${params}`;
-        startAnalysis(url, {
-          onRuleComplete(data) {
-            const d = data as { commits: Commit[] };
-            setAllCommits(d.commits);
-          },
-          onAIComplete(data) {
-            const d = data as { commits: Commit[] };
-            setAllCommits(d.commits);
-            setLoading(false);
-          },
-          onError() {
-            setLoading(false);
-          },
-        });
+        setStartable(true);
+        setLoading(false);
       }
     }
     init();
@@ -235,6 +220,27 @@ export default function DashboardPage() {
     setLoading(false);
   }
 
+  function handleStartAnalysis() {
+    setStartable(false);
+    const params = new URLSearchParams({ refresh: "true" });
+    if (selectedBranch && selectedBranch !== "default") params.set("branch", selectedBranch);
+    const url = `/api/repos/${owner}/${name}/commits?${params}`;
+    startAnalysis(url, {
+      onRuleComplete(data) {
+        const d = data as { commits: Commit[] };
+        setAllCommits(d.commits);
+      },
+      onAIComplete(data) {
+        const d = data as { commits: Commit[] };
+        setAllCommits(d.commits);
+        setLoading(false);
+      },
+      onError() {
+        setLoading(false);
+      },
+    });
+  }
+
   async function handleRefresh() {
     setRefreshing(true);
     setPage(1);
@@ -265,6 +271,64 @@ export default function DashboardPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-sm text-zinc-500">読み込み中...</p>
+      </div>
+    );
+  }
+
+  if (startable) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <Header
+          left={
+            <>
+              <div className="h-4 w-px bg-mist" />
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                <span className="hidden md:inline">リポジトリ一覧</span>
+              </Link>
+              <div className="hidden md:block h-4 w-px bg-mist" />
+              <span className="text-sm font-medium text-zinc-600 truncate max-w-[100px] md:max-w-none">
+                {owner}/{name}
+              </span>
+            </>
+          }
+          user={progress ? { name: progress.name, avatarUrl: progress.avatarUrl } : null}
+        />
+        <main className="flex flex-1 items-center justify-center px-6">
+          <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 text-center shadow-subtle">
+            <h1 className="text-heading-sm font-semibold text-midnight-ink">
+              {owner}/{name}
+            </h1>
+            <p className="mt-2 text-body-sm text-zinc-500">
+              分析するブランチを選択してください。
+            </p>
+            <div className="mt-6">
+              <select
+                value={selectedBranch}
+                onChange={(e) => {
+                  setSelectedBranch(e.target.value);
+                  localStorage.setItem(branchKey, e.target.value);
+                }}
+                className="w-full rounded-xl border border-mist bg-white px-4 py-3 text-body-sm text-zinc-700 focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20"
+              >
+                {branches.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleStartAnalysis}
+              className="mt-6 w-full rounded-2xl bg-brand-teal px-6 py-3 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+            >
+              分析を開始する
+            </button>
+          </div>
+        </main>
       </div>
     );
   }

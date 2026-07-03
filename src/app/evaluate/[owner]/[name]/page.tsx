@@ -11,7 +11,7 @@ import { AnalyzeLoading } from "@/components/AnalyzeLoading";
 import { useSSEAnalysis } from "@/hooks/useSSEAnalysis";
 import { SCORE } from "@/lib/evaluateCommit";
 import { exportMarkdown, downloadFile, type ExportCommit } from "@/lib/export";
-import { ArrowLeft, ArrowUpDown, Download } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, Download, AlertTriangle } from "lucide-react";
 
 type AspectScores = {
   format: number;
@@ -47,6 +47,10 @@ export default function EvaluatePage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<"score" | "date">("score");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState("default");
+  const [startable, setStartable] = useState(false);
+  const [branchLimitNotice, setBranchLimitNotice] = useState(false);
 
   const { analyzeState, startAnalysis } = useSSEAnalysis();
 
@@ -70,13 +74,24 @@ export default function EvaluatePage() {
     setError("");
 
     try {
-      const statusRes = await fetch(
-        `/api/evaluate/${owner}/${name}/commits?status=true`,
-      );
+      const [branchesRes, statusRes] = await Promise.all([
+        fetch(`/api/evaluate/${owner}/${name}/branches`),
+        fetch(`/api/evaluate/${owner}/${name}/commits?status=true`),
+      ]);
+
       if (!statusRes.ok) {
         const data = await statusRes.json().catch(() => ({}));
         throw new Error(data.error || `エラー (${statusRes.status})`);
       }
+
+      if (branchesRes.ok) {
+        const data = await branchesRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setBranches(data);
+          setSelectedBranch(data[0]);
+        }
+      }
+
       const status = await statusRes.json();
 
       if (status.cached) {
@@ -89,22 +104,8 @@ export default function EvaluatePage() {
         setAllCommits(data);
         setLoading(false);
       } else {
-        const url = `/api/evaluate/${owner}/${name}/commits?refresh=true`;
-        startAnalysis(url, {
-          onRuleComplete(data) {
-            const d = data as { commits: EvalCommit[] };
-            setAllCommits(d.commits);
-          },
-          onAIComplete(data) {
-            const d = data as { commits: EvalCommit[] };
-            setAllCommits(d.commits);
-            setLoading(false);
-          },
-          onError() {
-            setError("分析に失敗しました。もう一度お試しください。");
-            setLoading(false);
-          },
-        });
+        setStartable(true);
+        setLoading(false);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -115,6 +116,28 @@ export default function EvaluatePage() {
   useEffect(() => {
     init();
   }, [init]);
+
+  function handleStartAnalysis() {
+    setStartable(false);
+    const params = new URLSearchParams({ refresh: "true" });
+    if (selectedBranch && selectedBranch !== "default") params.set("branch", selectedBranch);
+    const url = `/api/evaluate/${owner}/${name}/commits?${params}`;
+    startAnalysis(url, {
+      onRuleComplete(data) {
+        const d = data as { commits: EvalCommit[] };
+        setAllCommits(d.commits);
+      },
+      onAIComplete(data) {
+        const d = data as { commits: EvalCommit[] };
+        setAllCommits(d.commits);
+        setLoading(false);
+      },
+      onError() {
+        setError("分析に失敗しました。もう一度お試しください。");
+        setLoading(false);
+      },
+    });
+  }
 
   function sortCommits(list: EvalCommit[]) {
     return [...list].sort((a, b) => {
@@ -157,7 +180,62 @@ export default function EvaluatePage() {
           <div className="text-center">
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
             <p className="text-body text-zinc-500">
-              {owner}/{name} のコミットを分析中...
+              {owner}/{name} の情報を読み込み中...
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (startable) {
+    return (
+      <div className="flex min-h-screen flex-col bg-pearl">
+        <Header
+          left={
+            <>
+              <div className="h-4 w-px bg-mist" />
+              <Link href="/" className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600">
+                <ArrowLeft className="h-3 w-3" />
+                <span className="hidden md:inline">トップに戻る</span>
+              </Link>
+              <div className="hidden md:block h-4 w-px bg-mist" />
+              <span className="text-sm font-medium text-zinc-600 truncate max-w-[120px] md:max-w-none">
+                {owner}/{name}
+              </span>
+            </>
+          }
+        />
+        <main className="flex flex-1 items-center justify-center px-6">
+          <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 text-center shadow-subtle">
+            <h1 className="text-heading-sm font-semibold text-midnight-ink">
+              {owner}/{name}
+            </h1>
+            <p className="mt-2 text-body-sm text-zinc-500">
+              分析するブランチを選択してください。
+            </p>
+            <div className="mt-6">
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="w-full rounded-xl border border-mist bg-white px-4 py-3 text-body-sm text-zinc-700 focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20"
+              >
+                {branches.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleStartAnalysis}
+              className="mt-6 w-full rounded-2xl bg-brand-teal px-6 py-3 text-body-sm font-semibold text-white transition-all hover:brightness-110"
+            >
+              分析を開始する
+            </button>
+            <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-amber-600">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              未ログインのため最大200件まで表示されます
             </p>
           </div>
         </main>
@@ -343,6 +421,8 @@ export default function EvaluatePage() {
           </div>
           <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 text-center">
             <p className="text-xs text-zinc-400">
+              未ログインのため最大200件まで表示されます。
+              <br />
               ログインすると自分のリポジトリで
               <br />
               XPや成長ゲージが使えます
