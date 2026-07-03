@@ -54,6 +54,32 @@ export default function EvaluatePage() {
 
   const { analyzeState, startAnalysis } = useSSEAnalysis();
 
+  const loginLink = (
+    <Link href="/login" className="rounded-2xl bg-brand-teal px-5 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110">
+      ログイン
+    </Link>
+  );
+
+  const LOCAL_CACHE_TTL = 24 * 60 * 60 * 1000;
+  function cacheKey(branch: string) { return `evaluate:${owner}/${name}/${branch}`; }
+  function loadLocalCache(branch: string): EvalCommit[] | null {
+    try {
+      const raw = localStorage.getItem(cacheKey(branch));
+      if (!raw) return null;
+      const { timestamp, commits } = JSON.parse(raw);
+      if (Date.now() - timestamp > LOCAL_CACHE_TTL) {
+        localStorage.removeItem(cacheKey(branch));
+        return null;
+      }
+      return commits;
+    } catch { return null; }
+  }
+  function saveLocalCache(branch: string, commits: EvalCommit[]) {
+    try {
+      localStorage.setItem(cacheKey(branch), JSON.stringify({ timestamp: Date.now(), commits }));
+    } catch { /* localStorage full */ }
+  }
+
   function handleExportMd() {
     const ownerName = `${owner}/${name}`;
     const commits: ExportCommit[] = allCommits.map((c) => ({
@@ -74,33 +100,41 @@ export default function EvaluatePage() {
     setError("");
 
     try {
-      const [branchesRes, statusRes] = await Promise.all([
-        fetch(`/api/evaluate/${owner}/${name}/branches`),
-        fetch(`/api/evaluate/${owner}/${name}/commits?status=true`),
-      ]);
+      const branchesRes = await fetch(`/api/evaluate/${owner}/${name}/branches`);
+      let defaultBranch = "default";
+      if (branchesRes.ok) {
+        const data = await branchesRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setBranches(data);
+          defaultBranch = data[0];
+          setSelectedBranch(data[0]);
+        }
+      }
 
+      const localCache = loadLocalCache(defaultBranch);
+      if (localCache) {
+        setAllCommits(localCache);
+        setLoading(false);
+        return;
+      }
+
+      const qs = new URLSearchParams({ status: "true", branch: defaultBranch });
+      const statusRes = await fetch(`/api/evaluate/${owner}/${name}/commits?${qs}`);
       if (!statusRes.ok) {
         const data = await statusRes.json().catch(() => ({}));
         throw new Error(data.error || `エラー (${statusRes.status})`);
       }
 
-      if (branchesRes.ok) {
-        const data = await branchesRes.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setBranches(data);
-          setSelectedBranch(data[0]);
-        }
-      }
-
       const status = await statusRes.json();
 
       if (status.cached) {
-        const res = await fetch(`/api/evaluate/${owner}/${name}/commits`);
+        const res = await fetch(`/api/evaluate/${owner}/${name}/commits?branch=${encodeURIComponent(defaultBranch)}`);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `エラー (${res.status})`);
         }
         const data: EvalCommit[] = await res.json();
+        saveLocalCache(defaultBranch, data);
         setAllCommits(data);
         setLoading(false);
       } else {
@@ -130,6 +164,7 @@ export default function EvaluatePage() {
       onAIComplete(data) {
         const d = data as { commits: EvalCommit[] };
         setAllCommits(d.commits);
+        saveLocalCache(selectedBranch, d.commits);
         setLoading(false);
       },
       onError() {
@@ -175,7 +210,7 @@ export default function EvaluatePage() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-pearl">
-        <Header />
+        <Header right={loginLink} />
         <main className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />
@@ -205,6 +240,7 @@ export default function EvaluatePage() {
               </span>
             </>
           }
+          right={loginLink}
         />
         <main className="flex flex-1 items-center justify-center px-6">
           <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 text-center shadow-subtle">
@@ -246,7 +282,7 @@ export default function EvaluatePage() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-pearl">
-        <Header />
+        <Header right={loginLink} />
         <main className="flex flex-1 items-center justify-center px-6">
           <div className="w-full max-w-md rounded-3xl border border-mist bg-white p-10 text-center shadow-subtle">
             <p className="text-heading-lg font-semibold text-zinc-300">!</p>
@@ -284,6 +320,7 @@ export default function EvaluatePage() {
             </span>
           </>
         }
+        right={loginLink}
       />
 
       <div className="flex flex-1 flex-col md:flex-row">

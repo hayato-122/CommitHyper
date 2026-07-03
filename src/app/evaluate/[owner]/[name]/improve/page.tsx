@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Header } from "@/components/Header";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { DiffViewer } from "@/components/DiffViewer";
@@ -136,6 +137,11 @@ function ImproveContent() {
               GitHubで見る ↗
             </a>
           </>
+        }
+        right={
+          <Link href="/login" className="rounded-2xl bg-brand-teal px-5 py-2.5 text-body-sm font-semibold text-white transition-all hover:brightness-110">
+            ログイン
+          </Link>
         }
       />
 
