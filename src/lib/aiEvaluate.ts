@@ -117,7 +117,11 @@ async function delay(ms: number) {
 
 export async function aiEvaluateCommit(
   message: string,
+  options?: { signal?: AbortSignal },
 ): Promise<AiEvaluationResult | null> {
+  const abortSignal = options?.signal;
+  if (abortSignal?.aborted) return null;
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.trim().length === 0) {
     logger.info("[aiEvaluate] GEMINI_API_KEY not set, skipping AI evaluation");
@@ -132,6 +136,10 @@ export async function aiEvaluateCommit(
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      if (abortSignal) {
+        abortSignal.addEventListener("abort", () => controller.abort(), { once: true });
+      }
 
       const response = await fetch(GEMINI_API_ENDPOINT, {
         method: "POST",

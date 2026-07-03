@@ -99,8 +99,9 @@ export async function GET(
         githubCommits,
         sse.send,
         (commit, i, total) => onRuleEval(commit, i, total, repository.id),
-        (item) => onAiEval(item),
+        (item) => onAiEval(item, request.signal),
         (item) => item.currentScore,
+        { signal: request.signal },
       );
 
       await prisma.repository.update({
@@ -165,12 +166,12 @@ async function onRuleEval(commit: import("@/lib/github").GitHubCommit, _i: numbe
   };
 }
 
-async function onAiEval(item: SerializedCommit): Promise<SerializedCommit> {
-  if (isMergeMessage(item.message)) {
+async function onAiEval(item: SerializedCommit, signal?: AbortSignal): Promise<SerializedCommit> {
+  if (isMergeMessage(item.message) || signal?.aborted) {
     return item;
   }
 
-  const { combined } = await evaluateWithAi(item.message);
+  const { combined } = await evaluateWithAi(item.message, { signal });
 
   await prisma.commit.update({
     where: { id: item.id },

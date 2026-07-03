@@ -6,13 +6,14 @@ export type SSEStream = {
   send: (event: string, data: unknown) => void;
   close: () => void;
   error: (data: Record<string, string>) => void;
+  cancelled: boolean;
 };
 
 export function createSSEStream(): { stream: ReadableStream; sse: SSEStream } {
   let isCancelled = false;
   const encoder = new TextEncoder();
 
-  const sse: SSEStream = { send: () => {}, close: () => {}, error: () => {} };
+  const sse: SSEStream = { send: () => {}, close: () => {}, error: () => {}, cancelled: false };
 
   const stream = new ReadableStream({
     start(controller) {
@@ -24,13 +25,21 @@ export function createSSEStream(): { stream: ReadableStream; sse: SSEStream } {
           isCancelled = true;
         }
       };
-      sse.close = () => controller.close();
+      sse.close = () => {
+        if (isCancelled) return;
+        controller.close();
+      };
       sse.error = (data) => {
         sse.send("error", data);
         controller.close();
       };
     },
+    cancel() {
+      isCancelled = true;
+    },
   });
+
+  Object.defineProperty(sse, "cancelled", { get: () => isCancelled });
 
   return { stream, sse };
 }
