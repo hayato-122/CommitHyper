@@ -2,13 +2,6 @@ import type { GitHubCommit } from "@/lib/github";
 import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
-const AI_CALL_DELAY_MS = 2000;
-const AI_CALL_JITTER_MS = 1000;
-
-function jitter(base: number, range: number): number {
-  return base + Math.floor(Math.random() * range);
-}
-
 export async function evaluateWithAi(
   message: string,
   options?: { signal?: AbortSignal },
@@ -76,10 +69,6 @@ export async function runSSEPipeline<T>(
     const item = await onAiItem(ruleItems[i], commits[i], i, ruleItems.length);
     aiItems.push(item);
 
-    if (i < ruleItems.length - 1) {
-      await delay(jitter(AI_CALL_DELAY_MS, AI_CALL_JITTER_MS));
-    }
-
     const elapsed = (Date.now() - startTime) / 1000;
     const perItem = elapsed / (i + 1);
     const remaining = Math.round(perItem * (ruleItems.length - i - 1));
@@ -111,6 +100,3 @@ function calcAvg<T>(items: T[], getScore: (item: T) => number): number {
   return Math.round(total / items.length);
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
