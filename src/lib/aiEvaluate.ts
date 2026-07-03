@@ -23,6 +23,7 @@ const GEMINI_API_ENDPOINT =
 const EVALUATION_PROMPT = [
   "あなたはコミットメッセージ評価の専門家です。",
   "与えられたコミットメッセージを以下の軸で採点し、JSONで返してください。",
+  "コミットメッセージは日本語を前提とします。",
   "",
   "### 観点3: Summaryの具体性（0〜20点）",
   "変更内容を固有名詞を含めて具体的に伝えているか評価。bodyも確認すること。",
@@ -34,7 +35,7 @@ const EVALUATION_PROMPT = [
   "変更内容に最適なscope（auth, ui, api, db, deps, config, ci, docs, test, perf, build, refactor）を提案。現状のscopeが適切なら空文字。",
   "",
   "### exampleMessage",
-  "改善後の完全なコミットメッセージを1つ。type(scope): summary 形式。",
+  "改善後の完全なコミットメッセージを1つ。type(scope): summary 形式。summaryは日本語で書くこと。",
   "",
   "### issues / suggestions",
   "問題点と改善提案をそれぞれ最大3つ。",
@@ -45,6 +46,7 @@ const BATCH_PROMPT = [
   "以下に複数のコミットメッセージを番号付きで示します。",
   "それぞれを以下の軸で採点し、**JSON配列**で返してください。",
   "配列の各要素は、評価対象と同じ順番に対応します。",
+  "コミットメッセージは日本語を前提とします。",
   "",
   "### 観点3: Summaryの具体性（0〜20点）",
   "変更内容を固有名詞を含めて具体的に伝えているか評価。bodyも確認すること。",
@@ -59,7 +61,7 @@ const BATCH_PROMPT = [
   "問題点と改善提案をそれぞれ最大3つ。",
   "",
   "### exampleMessage",
-  "改善後の完全なコミットメッセージを1つ。type(scope): summary 形式。",
+  "改善後の完全なコミットメッセージを1つ。type(scope): summary 形式。summaryは日本語で書くこと。",
   "",
   "レスポンスは必ず配列形式で: [{summaryScore: 0-20, whyScore: 0-15, suggestedScope: string, issues: string[], suggestions: string[], exampleMessage: string}, ...]",
 ].join("\n");
