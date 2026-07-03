@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { evaluateCommit, isMergeMessage } from "@/lib/evaluateCommit";
+import { evaluateCommit, isMergeMessage, SCORE } from "@/lib/evaluateCommit";
 import { safeParseJson } from "@/lib/json";
 import { logger } from "@/lib/logger";
 import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
@@ -99,7 +99,7 @@ export async function GET(
         githubCommits,
         sse.send,
         (commit, i, total) => onRuleEval(commit, i, total, repository.id),
-        (item, commit, i, total) => onAiEval(item, commit, i, total),
+        (item) => onAiEval(item),
         (item) => item.currentScore,
       );
 

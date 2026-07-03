@@ -1,6 +1,20 @@
 import type { GitHubCommit } from "@/lib/github";
+import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
+import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 
-const AI_CALL_DELAY_MS = 400;
+const AI_CALL_DELAY_MS = 2000;
+const AI_CALL_JITTER_MS = 1000;
+
+function jitter(base: number, range: number): number {
+  return base + Math.floor(Math.random() * range);
+}
+
+export async function evaluateWithAi(message: string): Promise<{ combined: ReturnType<typeof combineWithAi>; aiResult: Awaited<ReturnType<typeof aiEvaluateCommit>> }> {
+  const ruleResult = evaluateCommit(message);
+  const aiResult = await aiEvaluateCommit(message);
+  const combined = combineWithAi(ruleResult, aiResult);
+  return { combined, aiResult };
+}
 
 /**
  * 3フェーズ（fetch→rule→ai）のSSEパイプラインを実行する
@@ -47,7 +61,7 @@ export async function runSSEPipeline<T>(
     aiItems.push(item);
 
     if (i < ruleItems.length - 1) {
-      await delay(AI_CALL_DELAY_MS);
+      await delay(jitter(AI_CALL_DELAY_MS, AI_CALL_JITTER_MS));
     }
 
     const elapsed = (Date.now() - startTime) / 1000;

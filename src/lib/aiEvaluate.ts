@@ -1,5 +1,9 @@
 import { logger } from "@/lib/logger";
 
+function jitterDelay(base: number): number {
+  return base + Math.floor(Math.random() * 1000);
+}
+
 /**
  * AIによるコミットメッセージ評価サービス
  * Gemini Flash API を利用して、観点3（具体性）と観点4（Why）を評価する
@@ -150,6 +154,7 @@ export async function aiEvaluateCommit(
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 1024,
+            responseMimeType: "application/json",
           },
         }),
       });
@@ -167,7 +172,7 @@ export async function aiEvaluateCommit(
         logger.warn(
           `[aiEvaluate] Rate limited (429), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`,
         );
-        await delay(waitMs);
+        await delay(jitterDelay(waitMs));
         continue;
       }
 
@@ -178,7 +183,7 @@ export async function aiEvaluateCommit(
           `[aiEvaluate] Gemini API error: ${response.status} ${response.statusText}`,
           errorBody.slice(0, 500),
         );
-        await delay((attempt + 1) * 2000);
+        await delay(jitterDelay((attempt + 1) * 2000));
         continue;
       }
 
@@ -187,7 +192,7 @@ export async function aiEvaluateCommit(
       if (!text) {
         lastError = "Empty response from Gemini API";
         logger.error("[aiEvaluate] Empty response from Gemini API");
-        await delay((attempt + 1) * 1000);
+        await delay(jitterDelay((attempt + 1) * 1000));
         continue;
       }
 
@@ -198,7 +203,7 @@ export async function aiEvaluateCommit(
           "[aiEvaluate] No JSON found in Gemini response:",
           text.slice(0, 300),
         );
-        await delay((attempt + 1) * 1000);
+        await delay(jitterDelay((attempt + 1) * 1000));
         continue;
       }
 
@@ -237,7 +242,7 @@ export async function aiEvaluateCommit(
         lastError,
       );
       if (attempt < maxRetries - 1) {
-        await delay((attempt + 1) * 2000);
+        await delay(jitterDelay((attempt + 1) * 2000));
       }
     }
   }

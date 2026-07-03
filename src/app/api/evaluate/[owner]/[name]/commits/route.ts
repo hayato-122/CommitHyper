@@ -95,8 +95,8 @@ export async function GET(
       const { items } = await runSSEPipeline(
         githubCommits,
         sse.send,
-        (commit, i, total) => onRuleEval(commit, i, total),
-        (item, commit, i, total) => onAiEval(item, commit, i, total),
+        (commit) => onRuleEval(commit),
+        (item, commit) => onAiEval(item, commit),
         (item) => item.score,
       );
 
