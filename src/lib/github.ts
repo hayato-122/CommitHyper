@@ -88,6 +88,23 @@ export async function fetchCommitDiff(
   return res.text();
 }
 
+export async function fetchSingleCommit(
+  owner: string,
+  name: string,
+  sha: string,
+  token: string,
+): Promise<GitHubCommit & { parents: { sha: string }[] }> {
+  const url = `https://api.github.com/repos/${owner}/${name}/commits/${sha}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
+  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+  return res.json();
+}
+
 /**
  * ブランチ一覧を取得
  */

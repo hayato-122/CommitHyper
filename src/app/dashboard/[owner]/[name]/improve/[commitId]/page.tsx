@@ -66,8 +66,12 @@ export default function ImprovePage() {
   const [hasReevaluated, setHasReevaluated] = useState(false);
   // GitHub反映ガイドパネル表示
   const [showApplyGuide, setShowApplyGuide] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [guideTab, setGuideTab] = useState<"manual" | "agent">("manual");
+  const [clonedStatus, setClonedStatus] = useState<"cloned" | "not_cloned">("cloned");
+  const [branchName, setBranchName] = useState("");
+  const [scriptCopied, setScriptCopied] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<{ available: boolean; message?: string } | null>(null);
 
   useEffect(() => {
@@ -188,6 +192,7 @@ export default function ImprovePage() {
   async function handleConfirmApply() {
     if (!improvedMessage.trim()) return;
     setApplying(true);
+    setVerifyError(null);
     const res = await fetch(
       `/api/repos/${owner}/${name}/improve/${commitId}`,
       {
@@ -197,15 +202,75 @@ export default function ImprovePage() {
       }
     );
     const data = await res.json();
+    if (!res.ok && data.verified === false) {
+      setVerifyError(data.error);
+      setApplying(false);
+      return;
+    }
     setResult({ ...data, applied: true });
     setShowApplyGuide(false);
     setApplying(false);
   }
 
-  async function handleCopy() {
-    await navigator.clipboard.writeText(improvedMessage);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  function generateScript() {
+    const rebaseCmd = `git rebase -i ${commit!.sha}^ 2>/dev/null || git rebase -i --root`;
+    const branch = branchName || "{your-branch}";
+
+    if (clonedStatus === "cloned") {
+      return `git fetch origin
+git checkout ${branch}
+git reset --hard origin/${branch}
+git branch backup/before-reword-${commit!.sha.slice(0, 7)}
+${rebaseCmd}
+# エディタが開いたら:
+# 1. pick → reword（r）に変更して保存・閉じる
+# 2. メッセージを以下に書き換えて保存・閉じる
+git push --force-with-lease origin ${branch}`;
+    }
+
+    return `git clone git@github.com:${owner}/${name}.git
+cd ${name}
+git checkout ${branch}
+git branch backup/before-reword-${commit!.sha.slice(0, 7)}
+${rebaseCmd}
+# エディタが開いたら:
+# 1. pick → reword（r）に変更して保存・閉じる
+# 2. メッセージを以下に書き換えて保存・閉じる
+git push --force-with-lease origin ${branch}`;
+  }
+
+  function generateAgentPrompt() {
+    const branch = branchName || "{your-branch}";
+    return `コミット ${commit!.sha.slice(0, 7)}（ブランチ ${branch}）のメッセージを以下の内容に修正してください。
+
+修正後:
+${improvedMessage}
+
+安全のため事前にバックアップブランチを作成してください:
+git branch backup/before-reword-${commit!.sha.slice(0, 7)}
+
+リポジトリがまだローカルにない場合は先に clone してください:
+git clone git@github.com:${owner}/${name}.git
+
+手順:
+1. git fetch origin && git checkout ${branch} && git reset --hard origin/${branch}
+2. git branch backup/before-reword-${commit!.sha.slice(0, 7)}
+3. git rebase -i ${commit!.sha}^（親がない場合は git rebase -i --root）
+4. pick → reword に変更して保存
+5. エディタで上記の内容に書き換えて保存
+6. git push --force-with-lease origin ${branch}`;
+  }
+
+  async function handleCopyScript() {
+    await navigator.clipboard.writeText(generateScript());
+    setScriptCopied(true);
+    setTimeout(() => setScriptCopied(false), 2000);
+  }
+
+  async function handleCopyPrompt() {
+    await navigator.clipboard.writeText(generateAgentPrompt());
+    setScriptCopied(true);
+    setTimeout(() => setScriptCopied(false), 2000);
   }
 
   if (loading) {
@@ -360,57 +425,127 @@ export default function ImprovePage() {
                       <h3 className="mb-3 text-body-sm font-semibold text-midnight-ink">
                         GitHubでコミットメッセージを修正
                       </h3>
-                      <div className="mb-3 rounded-xl border border-brand-teal/30 bg-snow p-4">
-                        <p className="mb-2 text-caption font-medium text-brand-teal">
-                          Step 1 — 改善メッセージをコピー
-                        </p>
-                        <div className="rounded-lg border border-mist bg-white p-3 font-mono text-body-sm leading-relaxed text-midnight-ink break-all">
-                          {improvedMessage}
-                        </div>
-                        <button
-                          onClick={handleCopy}
-                          className="mt-2 flex items-center gap-1.5 rounded-lg border border-mist bg-white px-3 py-1.5 text-caption font-medium text-zinc-600 transition-all hover:bg-pearl"
-                        >
-                          {copied ? "コピーしました ✓" : "クリップボードにコピー"}
-                        </button>
-                      </div>
+
+                      {/* クローン状況選択 */}
                       <div className="mb-3 rounded-xl border border-mist bg-snow p-4">
                         <p className="mb-2 text-caption font-medium text-zinc-500">
-                          Step 2 — ターミナルでコミットを修正
+                          クローン状況
                         </p>
-                        <ol className="mb-3 space-y-1 pl-5 text-body-sm text-zinc-600">
-                          <li className="list-decimal">
-                            リポジトリのディレクトリで以下を実行：
-                            <code className="mx-1 rounded bg-pearl px-1.5 py-0.5 font-mono text-caption text-midnight-ink">
-                              {`git commit --amend -m "新しいメッセージ"`}
-                            </code>
-                          </li>
-                          <li className="list-decimal">
-                            続けて：
-                            <code className="mx-1 rounded bg-pearl px-1.5 py-0.5 font-mono text-caption text-midnight-ink">
-                              git push --force
-                            </code>
-                          </li>
-                        </ol>
-                        <a
-                          href={`https://github.com/${owner}/${name}/commit/${commit.sha}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-caption font-medium text-brand-teal hover:underline"
-                        >
-                          GitHubでコミットを確認する ↗
-                        </a>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setClonedStatus("cloned")}
+                            className={`rounded-lg px-4 py-1.5 text-caption font-medium transition-all ${
+                              clonedStatus === "cloned"
+                                ? "bg-brand-teal text-white"
+                                : "border border-mist bg-white text-zinc-600 hover:bg-pearl"
+                            }`}
+                          >
+                            すでにクローン済み
+                          </button>
+                          <button
+                            onClick={() => setClonedStatus("not_cloned")}
+                            className={`rounded-lg px-4 py-1.5 text-caption font-medium transition-all ${
+                              clonedStatus === "not_cloned"
+                                ? "bg-brand-teal text-white"
+                                : "border border-mist bg-white text-zinc-600 hover:bg-pearl"
+                            }`}
+                          >
+                            まだクローンしていない
+                          </button>
+                        </div>
                       </div>
+
+                      {/* ブランチ名入力 */}
+                      <div className="mb-3 rounded-xl border border-mist bg-snow p-4">
+                        <p className="mb-2 text-caption font-medium text-zinc-500">
+                          ブランチ名
+                        </p>
+                        <input
+                          value={branchName}
+                          onChange={(e) => setBranchName(e.target.value)}
+                          placeholder="main"
+                          className="w-full rounded-lg border border-mist bg-white px-3 py-2 font-mono text-body-sm text-midnight-ink placeholder:text-fog-gray focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/20"
+                        />
+                      </div>
+
+                      {/* タブ切り替え */}
+                      <div className="mb-3 flex border-b border-mist">
+                        <button
+                          onClick={() => setGuideTab("manual")}
+                          className={`px-4 py-2 text-caption font-medium transition-all ${
+                            guideTab === "manual"
+                              ? "border-b-2 border-brand-teal text-brand-teal"
+                              : "text-zinc-500 hover:text-midnight-ink"
+                          }`}
+                        >
+                          手動
+                        </button>
+                        <button
+                          onClick={() => setGuideTab("agent")}
+                          className={`px-4 py-2 text-caption font-medium transition-all ${
+                            guideTab === "agent"
+                              ? "border-b-2 border-brand-teal text-brand-teal"
+                              : "text-zinc-500 hover:text-midnight-ink"
+                          }`}
+                        >
+                          AIエージェント
+                        </button>
+                      </div>
+
+                      {/* 手動タブ: スクリプト */}
+                      {guideTab === "manual" && (
+                        <div className="mb-3">
+                          <p className="mb-2 text-caption text-zinc-400">
+                            {clonedStatus === "cloned"
+                              ? "VS Codeでプロジェクトを開き、ターミナルに以下のブロックを貼り付けて実行してください。"
+                              : "ターミナルを開いて以下のブロックを貼り付けて実行してください。"}
+                          </p>
+                          <pre className="overflow-x-auto rounded-xl border border-mist bg-midnight-ink p-4 font-mono text-caption leading-relaxed text-white">
+                            {generateScript()}
+                          </pre>
+                          <button
+                            onClick={handleCopyScript}
+                            className="mt-2 rounded-lg border border-mist bg-white px-4 py-1.5 text-caption font-medium text-zinc-600 transition-all hover:bg-pearl"
+                          >
+                            {scriptCopied ? "コピーしました ✓" : "コマンドをコピー"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* AIエージェントタブ: プロンプト */}
+                      {guideTab === "agent" && (
+                        <div className="mb-3 rounded-xl border border-mist bg-snow p-4">
+                          <p className="mb-2 text-caption text-zinc-400">
+                            プロンプトをコピーしてあなたのコーディングエージェントに貼り付けてください。
+                          </p>
+                          <pre className="mb-2 overflow-x-auto rounded-lg border border-mist bg-white p-3 font-mono text-caption leading-relaxed text-midnight-ink whitespace-pre-wrap">
+                            {generateAgentPrompt()}
+                          </pre>
+                          <button
+                            onClick={handleCopyPrompt}
+                            className="rounded-lg border border-mist bg-white px-4 py-1.5 text-caption font-medium text-zinc-600 transition-all hover:bg-pearl"
+                          >
+                            {scriptCopied ? "コピーしました ✓" : "プロンプトをコピー"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Step 3: 修正完了 */}
                       <div className="rounded-xl border border-mist bg-snow p-4">
                         <p className="mb-2 text-caption font-medium text-zinc-500">
-                          Step 3 — 修正完了
+                          修正完了
                         </p>
                         <p className="mb-3 text-caption text-zinc-400">
                           GitHub上のコミットメッセージを修正したら、このボタンでCommitHyperにスコアとXPを反映します。
                         </p>
+                        {verifyError && (
+                          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-caption text-red-700">
+                            {verifyError}
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <button
-                            onClick={() => setShowApplyGuide(false)}
+                            onClick={() => { setShowApplyGuide(false); setVerifyError(null); }}
                             className="rounded-xl border border-mist bg-white px-5 py-2 text-body-sm font-medium text-zinc-500 transition-all hover:bg-pearl"
                           >
                             キャンセル

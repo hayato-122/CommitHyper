@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 import { safeParseJson } from "@/lib/json";
+import { fetchSingleCommit } from "@/lib/github";
 import { ImproveMessageSchema } from "@/lib/validation";
 
 export async function GET(
@@ -104,7 +105,7 @@ export async function PUT(
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { commitId } = await params;
+  const { owner, name, commitId } = await params;
   const body = await request.json();
   const parsed = ImproveMessageSchema.safeParse(body);
   if (!parsed.success) {
@@ -120,7 +121,20 @@ export async function PUT(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
-  // 最終評価（ルール+AI統合）
+  // GitHub上の実際のコミットメッセージを検証
+  const githubCommit = await fetchSingleCommit(owner, name, commit.sha, session.accessToken!);
+  const actualMessage = githubCommit.commit.message.trim();
+  const expectedMessage = improvedMessage.trim();
+  const verified = actualMessage === expectedMessage;
+
+  if (!verified) {
+    return Response.json({
+      error: "GitHub上のコミットメッセージが変更されていません。手順に従って修正してから再度お試しください。",
+      verified: false,
+      actualMessage,
+    }, { status: 400 });
+  }
+
   const ruleResult = evaluateCommit(improvedMessage);
   const aiResult = await aiEvaluateCommit(improvedMessage);
   const combined = combineWithAi(ruleResult, aiResult);
@@ -217,5 +231,6 @@ export async function PUT(
     xpGained,
     user,
     applied: true,
+    verified: true,
   });
 }
