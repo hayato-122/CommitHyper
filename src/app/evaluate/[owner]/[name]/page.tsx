@@ -11,7 +11,7 @@ import { AnalyzeLoading } from "@/components/AnalyzeLoading";
 import { useSSEAnalysis } from "@/hooks/useSSEAnalysis";
 import { SCORE } from "@/lib/evaluateCommit";
 import { exportMarkdown, downloadFile, type ExportCommit } from "@/lib/export";
-import { ArrowLeft, ArrowUpDown, Download, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ArrowUpDown, Download, AlertTriangle, RotateCw } from "lucide-react";
 
 type AspectScores = {
   format: number;
@@ -50,7 +50,7 @@ export default function EvaluatePage() {
   const [branches, setBranches] = useState<string[]>([]);
   const [selectedBranch, setSelectedBranch] = useState("default");
   const [startable, setStartable] = useState(false);
-  const [branchLimitNotice, setBranchLimitNotice] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { analyzeState, startAnalysis } = useSSEAnalysis();
 
@@ -101,75 +101,90 @@ export default function EvaluatePage() {
 
     try {
       const branchesRes = await fetch(`/api/evaluate/${owner}/${name}/branches`);
-      let defaultBranch = "default";
       if (branchesRes.ok) {
         const data = await branchesRes.json();
         if (Array.isArray(data) && data.length > 0) {
           setBranches(data);
-          defaultBranch = data[0];
           setSelectedBranch(data[0]);
         }
       }
-
-      const localCache = loadLocalCache(defaultBranch);
-      if (localCache) {
-        setAllCommits(localCache);
-        setLoading(false);
-        return;
-      }
-
-      const qs = new URLSearchParams({ status: "true", branch: defaultBranch });
-      const statusRes = await fetch(`/api/evaluate/${owner}/${name}/commits?${qs}`);
-      if (!statusRes.ok) {
-        const data = await statusRes.json().catch(() => ({}));
-        throw new Error(data.error || `エラー (${statusRes.status})`);
-      }
-
-      const status = await statusRes.json();
-
-      if (status.cached) {
-        const res = await fetch(`/api/evaluate/${owner}/${name}/commits?branch=${encodeURIComponent(defaultBranch)}`);
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `エラー (${res.status})`);
-        }
-        const data: EvalCommit[] = await res.json();
-        saveLocalCache(defaultBranch, data);
-        setAllCommits(data);
-        setLoading(false);
-      } else {
-        setStartable(true);
-        setLoading(false);
-      }
+      setStartable(true);
+      setLoading(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setLoading(false);
     }
-  }, [owner, name, startAnalysis]);
+  }, [owner, name]);
 
   useEffect(() => {
     init();
   }, [init]);
 
-  function handleStartAnalysis() {
+  async function handleStartAnalysis() {
     setStartable(false);
+    setLoading(true);
+
+    const localCache = loadLocalCache(selectedBranch);
+    if (localCache) {
+      setAllCommits(localCache);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const qs = new URLSearchParams({ status: "true", branch: selectedBranch });
+      const statusRes = await fetch(`/api/evaluate/${owner}/${name}/commits?${qs}`);
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        if (status.cached) {
+          const res = await fetch(`/api/evaluate/${owner}/${name}/commits?branch=${encodeURIComponent(selectedBranch)}`);
+          if (res.ok) {
+            const data: EvalCommit[] = await res.json();
+            saveLocalCache(selectedBranch, data);
+            setAllCommits(data);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+    } catch { /* fall through to SSE */ }
+
+    setLoading(false);
     const params = new URLSearchParams({ refresh: "true" });
     if (selectedBranch && selectedBranch !== "default") params.set("branch", selectedBranch);
     const url = `/api/evaluate/${owner}/${name}/commits?${params}`;
     startAnalysis(url, {
       onRuleComplete(data) {
-        const d = data as { commits: EvalCommit[] };
-        setAllCommits(d.commits);
+        setAllCommits((data as { commits: EvalCommit[] }).commits);
       },
       onAIComplete(data) {
-        const d = data as { commits: EvalCommit[] };
-        setAllCommits(d.commits);
-        saveLocalCache(selectedBranch, d.commits);
-        setLoading(false);
+        const d = (data as { commits: EvalCommit[] }).commits;
+        setAllCommits(d);
+        saveLocalCache(selectedBranch, d);
       },
       onError() {
         setError("分析に失敗しました。もう一度お試しください。");
-        setLoading(false);
+      },
+    });
+  }
+
+  function handleRefresh() {
+    setRefreshing(true);
+    localStorage.removeItem(cacheKey(selectedBranch));
+    const params = new URLSearchParams({ refresh: "true" });
+    if (selectedBranch && selectedBranch !== "default") params.set("branch", selectedBranch);
+    startAnalysis(`/api/evaluate/${owner}/${name}/commits?${params}`, {
+      onRuleComplete(data) {
+        setAllCommits((data as { commits: EvalCommit[] }).commits);
+      },
+      onAIComplete(data) {
+        const d = (data as { commits: EvalCommit[] }).commits;
+        setAllCommits(d);
+        saveLocalCache(selectedBranch, d);
+        setRefreshing(false);
+      },
+      onError() {
+        setRefreshing(false);
       },
     });
   }
@@ -315,9 +330,23 @@ export default function EvaluatePage() {
               <span className="hidden md:inline">トップに戻る</span>
             </Link>
             <div className="hidden md:block h-4 w-px bg-mist" />
-            <span className="text-sm font-medium text-zinc-600 truncate max-w-[120px] md:max-w-none">
+            <span className="text-sm font-medium text-zinc-600 truncate max-w-[100px] md:max-w-none">
               {owner}/{name}
             </span>
+            {branches.length > 0 && (
+              <>
+                <div className="hidden md:block h-4 w-px bg-mist" />
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => { setSelectedBranch(e.target.value); setAllCommits([]); setStartable(true); }}
+                  className="max-w-[80px] md:max-w-[140px] truncate rounded-lg border border-mist bg-white px-2 py-1 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                >
+                  {branches.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </>
+            )}
           </>
         }
         right={loginLink}
@@ -377,6 +406,14 @@ export default function EvaluatePage() {
               >
                 <Download className="h-3.5 w-3.5" />
                 Markdownで保存
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <RotateCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                再分析
               </button>
             </div>
           </div>

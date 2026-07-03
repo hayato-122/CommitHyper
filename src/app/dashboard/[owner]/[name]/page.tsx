@@ -137,11 +137,9 @@ export default function DashboardPage() {
         fetch("/api/user/progress"),
       ]);
 
-      let branchesData: string[] = [];
       if (branchesRes.ok) {
         const data = await branchesRes.json();
         if (Array.isArray(data) && data.length > 0) {
-          branchesData = data;
           setBranches(data);
           setSelectedBranch(data[0]);
         }
@@ -151,20 +149,9 @@ export default function DashboardPage() {
         setProgress(data);
       }
 
-      const statusRes = await fetch(
-        `/api/repos/${owner}/${name}/commits?status=true`,
-      );
-      const status = await statusRes.json();
-
       if (cancelled) return;
-
-      if (status.analyzed) {
-        await loadAllCommits();
-        setLoading(false);
-      } else {
-        setStartable(true);
-        setLoading(false);
-      }
+      setStartable(true);
+      setLoading(false);
     }
     init();
     return () => {
@@ -220,20 +207,32 @@ export default function DashboardPage() {
     setLoading(false);
   }
 
-  function handleStartAnalysis() {
+  async function handleStartAnalysis() {
     setStartable(false);
+    setLoading(true);
+
+    try {
+      const statusRes = await fetch(`/api/repos/${owner}/${name}/commits?status=true`);
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        if (status.analyzed) {
+          await loadAllCommits(false, selectedBranch);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch { /* fall through to SSE */ }
+
+    setLoading(false);
     const params = new URLSearchParams({ refresh: "true" });
     if (selectedBranch && selectedBranch !== "default") params.set("branch", selectedBranch);
     const url = `/api/repos/${owner}/${name}/commits?${params}`;
     startAnalysis(url, {
       onRuleComplete(data) {
-        const d = data as { commits: Commit[] };
-        setAllCommits(d.commits);
+        setAllCommits((data as { commits: Commit[] }).commits);
       },
       onAIComplete(data) {
-        const d = data as { commits: Commit[] };
-        setAllCommits(d.commits);
-        setLoading(false);
+        setAllCommits((data as { commits: Commit[] }).commits);
       },
       onError() {
         setLoading(false);
