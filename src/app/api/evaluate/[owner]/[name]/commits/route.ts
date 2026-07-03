@@ -96,8 +96,9 @@ export async function GET(
         githubCommits,
         sse.send,
         (commit) => onRuleEval(commit),
-        (item, commit) => onAiEval(item, commit),
+        (item, commit) => onAiEval(item, commit, request.signal),
         (item) => item.score,
+        { signal: request.signal },
       );
 
       setCache(cacheKey, items);
@@ -121,12 +122,12 @@ async function onRuleEval(commit: import("@/lib/github").GitHubCommit): Promise<
   return toEvaluatedCommit(commit, ruleResult);
 }
 
-async function onAiEval(item: EvaluatedCommit, commit: import("@/lib/github").GitHubCommit): Promise<EvaluatedCommit> {
-  if (isMergeMessage(commit.commit.message)) {
+async function onAiEval(item: EvaluatedCommit, commit: import("@/lib/github").GitHubCommit, signal?: AbortSignal): Promise<EvaluatedCommit> {
+  if (isMergeMessage(commit.commit.message) || signal?.aborted) {
     return item;
   }
 
-  const { combined } = await evaluateWithAi(commit.commit.message);
+  const { combined } = await evaluateWithAi(commit.commit.message, { signal });
   return {
     ...item,
     score: combined.score,
