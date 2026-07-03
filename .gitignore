@@ -53,7 +53,9 @@ opencode.json
 # MCP profile switcher
 /mcp.ps1
 
-# stray artifact
+# capture temp files
+/.capture-tmp/
+/test-results/
 /0
 
 # DESIGNDOCS
