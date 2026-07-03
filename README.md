@@ -2,10 +2,10 @@
 
 アプリURL : [https://commithyper.vercel.app](https://commithyper.vercel.app)
 
-<img src="https://placehold.co/1200x630/f4f4f5/09090b?text=CommitHyper&font=dm-sans" width="100%" alt="CommitHyper">
+<img src="public/images/hero.png" width="100%" alt="CommitHyper ランディングページ">
 
 GitHub リポジトリのコミットメッセージを分析・評価し、改善学習を促す Web アプリケーションです。  
-過去の自分のコミットを題材に、ルールベース評価と改善提案を通じて実践的なコミット力を身につけられます。
+過去の自分のコミットを題材に、ルールベース評価と AI 改善提案を通じて実践的なコミット力を身につけられます。
 
 ## 開発背景
 
@@ -22,26 +22,31 @@ GitHub リポジトリのコミットメッセージを分析・評価し、改�
 ## 主要な機能
 
 - GitHub ログインによる自身のリポジトリ分析
-- ルールベース評価エンジンによる 100 点満点のスコアリング
+- ルールベース + AI のハイブリッド評価による 100 点満点のスコアリング
 - 改善候補の自動抽出と書き直し練習
 - XP / レベル / 称号による成長システム
 - ログイン不要の公開リポジトリ評価
+- ブランチ選択による分析対象の切り替え
+- 日本語コミットメッセージを前提とした評価プロンプト
+- AI 評価はバッチ処理 + レート制限対策済み（Gemini 3.1 Flash Lite）
 
-### 📊 ダッシュボード
+### 📊 公開評価（ログイン不要）
 
-|                     改善候補一覧（メインエリア）                     |             成長カード & 品質メトリクス（サイドパネル）             |
-| :------------------------------------------------------------------: | :-----------------------------------------------------------------: |
-| <img src="https://placehold.co/700x500/ffffff/09090b?text=%E6%94%B9%E5%96%84%E5%80%99%E8%A3%9C" width="700" alt="改善候補"> | <img src="https://placehold.co/280x400/019d91/ffffff?text=Growth+%26+Quality" width="280" alt="成長・品質"> |
+|                     分析開始 → SSE進捗アニメーション                     |                     結果画面の操作                          |
+| :----------------------------------------------------------------------: | :--------------------------------------------------------: |
+| <video src="public/images/evaluate-loading.mp4" width="600" autoplay loop muted playsinline></video> | <video src="public/images/results-interaction.mp4" width="600" autoplay loop muted playsinline></video> |
 
-### ✏️ コミット改善画面
+|                     改善画面（メッセージ編集→再評価）                    |
+| :----------------------------------------------------------------------: |
+| <video src="public/images/improve-commit.mp4" width="100%" autoplay loop muted playsinline></video> |
 
-|                diff と評価のスプリットビュー                |
-| :--------------------------------------------------------: |
-| <img src="https://placehold.co/1200x700/ffffff/09090b?text=%E3%82%B9%E3%83%97%E3%83%AA%E3%83%83%E3%83%88%E3%83%93%E3%83%A5%E3%83%BC" width="100%" alt="改善画面"> |
+### 📖 ガイドページ
 
-|             再評価結果と XP 獲得              |
-| :------------------------------------------: |
-| <img src="https://placehold.co/600x400/019d91/ffffff?text=%E5%86%8D%E8%A9%95%E4%BE%A1+%2B15XP" width="600" alt="再評価結果"> |
+<img src="public/images/guide.png" width="100%" alt="良いコミットメッセージとは ガイドページ">
+
+### 🏠 ランディングページ
+
+<img src="public/images/hero.png" width="100%" alt="CommitHyper ランディングページ">
 
 ## 評価ロジック
 
@@ -51,8 +56,8 @@ GitHub リポジトリのコミットメッセージを分析・評価し、改�
 |---|------|------|-------------|
 | 1 | 形式 | 30 / 15 点 | `type(scope): summary` か。scope 有無で差分 |
 | 2 | 種別 | 20 / 10 点 | feat / fix / refactor 等、標準 type との一致度 |
-| 3 | 具体性 | 20 点 | 固有名詞を含む明確な説明（AI 評価で上書き可） |
-| 4 | Why | 15 点 | body での理由説明（AI 評価で上書き可） |
+| 3 | 具体性 | 20 点 | 固有名詞を含む明確な説明（AI 評価） |
+| 4 | Why | 15 点 | body での理由説明（AI 評価） |
 | 5 | 可読性 | 10 点 | 一行 10〜72 文字 |
 | 6 | 追跡性 | 5 点 | Issue 番号や scope の有無 |
 
@@ -61,6 +66,7 @@ GitHub リポジトリのコミットメッセージを分析・評価し、改�
 - ランク: excellent (90〜100) / good (80〜89) / needs_improvement (50〜79) / poor (0〜49)
 - scope なし + 課題番号なし → 79 点キャップ
 - 特別処理: `Initial commit` / `Merge pull request` → 55 点で固定
+- コミットメッセージは日本語を前提として評価します
 
 ### XP 付与
 
@@ -88,25 +94,28 @@ GitHub リポジトリのコミットメッセージを分析・評価し、改�
 分析開始から表示まで、3 つのフェーズを SSE（Server-Sent Events）で逐次処理します:
 
 ```
-Phase 1: GitHub API Fetch ──── 100 件ずつページネーション
+Phase 1: GitHub API Fetch ──── 100 件ずつページネーション（ブランチ指定可）
          ↓
-Phase 2: ルールベース評価 ──── evaluateCommit() → DB 保存 + 平均スコア通知
-         ↓ (クライアントはこの時点でダッシュボード表示可能)
-Phase 3: AI 評価 ──────────── aiEvaluateCommit() + combineWithAi() → DB 更新
+Phase 2: ルールベース評価 ──── evaluateCommit() → 平均スコア通知
+         ↓ (クライアントはこの時点で暫定表示可能)
+Phase 3: AI 評価 ──────────── 3件ずつバッチ処理（Gemini 3.1 Flash Lite）
          ↓
-         Dashboard 表示完了
+         分析完了表示
 ```
+
+- AI 評価はレート制限対策済み（RPM 15 遵守のため 4 秒間隔）
+- RPD 超過時はルール評価のみで表示
+- 429 エラー時はリトライして継続
 
 ### 改善フロー
 
 ```
 改善画面 ─→ POST /improve/[commitId] ─→ ルール + AI 評価 ─→ 結果表示（DB 未保存）
                                               ↓ (合格)
-                    PUT /improve/[commitId] ─→ ImprovementAttempt 保存
-                                             → Commit.currentScore 更新
-                                             → XpEvent 作成
-                                             → User.xp 加算
-                                             → Dashboard 再描画
+                    改善内容を保存 ─→ Commit.currentScore 更新
+                                     → XpEvent 作成
+                                     → User.xp 加算
+                                     → Dashboard 再描画
 ```
 
 ### 認証
@@ -126,20 +135,20 @@ GitHub OAuth ─→ Auth.js v5 (JWT strategy) ─→ session.accessToken で API
 | `/dashboard` | リポジトリ選択 |
 | `/dashboard/[owner]/[name]` | 改善候補一覧 + 成長カード・品質メトリクス |
 | `/dashboard/[owner]/[name]/improve/[commitId]` | 改善画面（スプリットビュー） |
-| `/guide` | 良いコミットメッセージとは |
-| `/evaluate/[owner]/[name]` | 公開評価（ログイン不要） |
+| `/guide` | 良いコミットメッセージとは（プロンプトコピー機能付き） |
+| `/evaluate/[owner]/[name]` | 公開評価（ログイン不要、ブランチ選択・再分析可） |
 
 ## 使用技術
 
 | カテゴリ | 技術 |
 |---------|------|
 | フレームワーク | Next.js 16.2.7 (App Router), React 19.2.4 |
-| 言語 | TypeScript ^5 |
-| スタイリング | Tailwind CSS ^4 |
-| 認証 | Auth.js (next-auth) ^5.0.0-beta.31 — GitHub OAuth |
-| ORM | Prisma ^7.8.0 |
+| 言語 | TypeScript 5 |
+| スタイリング | Tailwind CSS 4 |
+| 認証 | Auth.js 5 (next-auth) — GitHub OAuth, JWT |
+| ORM | Prisma 7.8.0 |
 | DB | PostgreSQL (Supabase 無料枠) |
-| UI コンポーネント | shadcn/ui ^4.11.0 + Radix UI + lucide-react |
-| アニメーション | motion (framer-motion) ^12.40.0 |
-| AI 評価 | Google Gemini API（オプション） |
+| UI コンポーネント | shadcn/ui 4.11.0 + Radix UI + lucide-react |
+| アニメーション | motion (framer-motion) 12.40.0 |
+| AI 評価 | Google Gemini 3.1 Flash Lite（バッチ処理・レート制限対策済み） |
 | デプロイ | Vercel |
