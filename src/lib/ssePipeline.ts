@@ -63,11 +63,24 @@ export async function runSSEPipeline<T>(
   send("phase", { name: "ai", message: "AI評価中..." });
   const startTime = Date.now();
   const aiItems: T[] = [];
+  let consecutiveNull = 0;
 
   for (let i = 0; i < ruleItems.length; i++) {
     if (isCancelled()) break;
     const item = await onAiItem(ruleItems[i], commits[i], i, ruleItems.length);
     aiItems.push(item);
+
+    if (getScore(item) === getScore(ruleItems[i])) {
+      consecutiveNull++;
+    } else {
+      consecutiveNull = 0;
+    }
+
+    if (consecutiveNull >= 3) break;
+
+    if (i < ruleItems.length - 1) {
+      await delay(1000);
+    }
 
     const elapsed = (Date.now() - startTime) / 1000;
     const perItem = elapsed / (i + 1);
@@ -98,5 +111,9 @@ function calcAvg<T>(items: T[], getScore: (item: T) => number): number {
   if (items.length === 0) return 0;
   const total = items.reduce((s, item) => s + getScore(item), 0);
   return Math.round(total / items.length);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
