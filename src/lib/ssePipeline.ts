@@ -1,6 +1,6 @@
 import type { GitHubCommit } from "@/lib/github";
 import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
-import { aiEvaluateCommit } from "@/lib/aiEvaluate";
+import { aiEvaluateCommit, aiEvaluateBatch, clearBatchCache, isAiRpdExceeded } from "@/lib/aiEvaluate";
 
 export async function evaluateWithAi(
   message: string,
@@ -12,15 +12,9 @@ export async function evaluateWithAi(
   return { combined, aiResult };
 }
 
-/**
- * 3フェーズ（fetch→rule→ai）のSSEパイプラインを実行する
- *
- * @param commits GitHubから取得したコミット一覧
- * @param send SSEイベント送信関数
- * @param handlers.onRuleItem Phase2: 各コミットのルール評価（DB保存もここで）
- * @param handlers.onAiItem  Phase3: 各コミットのAI評価（DB更新もここで）
- * @param handlers.getScore  アイテムからスコアを取得（型Tに依存するため）
- */
+const BATCH_SIZE = 10;
+const RPM_DELAY_MS = 1000;
+
 export async function runSSEPipeline<T>(
   commits: GitHubCommit[],
   send: (event: string, data: unknown) => void,
@@ -63,24 +57,39 @@ export async function runSSEPipeline<T>(
   send("phase", { name: "ai", message: "AI評価中..." });
   const startTime = Date.now();
   const aiItems: T[] = [];
-  let consecutiveNull = 0;
 
+  // Phase 3a: Batch-precompute AI results
+  clearBatchCache();
+  let rpdExceeded = false;
+
+  for (let batchStart = 0; batchStart < ruleItems.length; batchStart += BATCH_SIZE) {
+    if (isCancelled()) break;
+
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, ruleItems.length);
+    const batchMessages = commits.slice(batchStart, batchEnd).map((c) => c.commit.message);
+
+    const results = await aiEvaluateBatch(batchMessages, options);
+    const allNull = results.every((r) => r === null);
+
+    if (allNull) {
+      if (isAiRpdExceeded()) rpdExceeded = true;
+      break;
+    }
+
+    if (batchEnd < ruleItems.length) {
+      await delay(RPM_DELAY_MS);
+    }
+  }
+
+  if (rpdExceeded) {
+    send("rpd_exceeded", { message: "1日のAI評価上限(20件)に達しました。ルールベースの評価のみ表示します。" });
+  }
+
+  // Phase 3b: Apply AI results through per-commit callbacks (cache hits, no API calls)
   for (let i = 0; i < ruleItems.length; i++) {
     if (isCancelled()) break;
     const item = await onAiItem(ruleItems[i], commits[i], i, ruleItems.length);
     aiItems.push(item);
-
-    if (getScore(item) === getScore(ruleItems[i])) {
-      consecutiveNull++;
-    } else {
-      consecutiveNull = 0;
-    }
-
-    if (consecutiveNull >= 3) break;
-
-    if (i < ruleItems.length - 1) {
-      await delay(1000);
-    }
 
     const elapsed = (Date.now() - startTime) / 1000;
     const perItem = elapsed / (i + 1);
@@ -116,4 +125,3 @@ function calcAvg<T>(items: T[], getScore: (item: T) => number): number {
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
-

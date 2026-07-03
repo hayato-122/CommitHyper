@@ -8,7 +8,6 @@ export type AiEvaluationResult = {
   issues: string[];
   suggestions: string[];
   exampleMessage: string;
-  skipped?: null;
 };
 
 export type AiSkippedReason =
@@ -41,6 +40,98 @@ const EVALUATION_PROMPT = [
   "問題点と改善提案をそれぞれ最大3つ。",
 ].join("\n");
 
+const BATCH_PROMPT = [
+  "あなたはコミットメッセージ評価の専門家です。",
+  "以下に複数のコミットメッセージを番号付きで示します。",
+  "それぞれを以下の軸で採点し、**JSON配列**で返してください。",
+  "配列の各要素は、評価対象と同じ順番に対応します。",
+  "",
+  "### 観点3: Summaryの具体性（0〜20点）",
+  "変更内容を固有名詞を含めて具体的に伝えているか評価。bodyも確認すること。",
+  "",
+  "### 観点4: Why・背景の説明（0〜15点）",
+  "なぜ変更が必要かが伝わるか評価。bodyが空なら0〜10の範囲に留める。",
+  "",
+  "### scopeの提案",
+  "変更内容に最適なscopeを提案。現状のscopeが適切なら空文字。",
+  "",
+  "### issues / suggestions",
+  "問題点と改善提案をそれぞれ最大3つ。",
+  "",
+  "### exampleMessage",
+  "改善後の完全なコミットメッセージを1つ。type(scope): summary 形式。",
+  "",
+  "レスポンスは必ず配列形式で: [{summaryScore: 0-20, whyScore: 0-15, suggestedScope: string, issues: string[], suggestions: string[], exampleMessage: string}, ...]",
+].join("\n");
+
+// --- Daily request counter ---
+let dailyCount = 0;
+let dailyResetDate = "";
+const RPD_LIMIT = 20;
+
+function checkDailyReset() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (dailyResetDate !== today) {
+    dailyCount = 0;
+    dailyResetDate = today;
+  }
+}
+
+export function getDailyAiCount(): number {
+  checkDailyReset();
+  return dailyCount;
+}
+
+export function isAiRpdExceeded(): boolean {
+  checkDailyReset();
+  return dailyCount >= RPD_LIMIT;
+}
+
+// --- Batch result cache ---
+const batchCache = new Map<string, AiEvaluationResult | null>();
+
+export function clearBatchCache() {
+  batchCache.clear();
+}
+
+function callGemini(body: unknown, options?: { signal?: AbortSignal }): Promise<Response> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey.trim().length === 0) {
+    return Promise.reject(new Error("no_key"));
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  if (options?.signal) {
+    options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  return fetch(GEMINI_API_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    signal: controller.signal,
+    body: JSON.stringify(body),
+  }).finally(() => clearTimeout(timeoutId));
+}
+
+function parseSingleResult(parsed: Record<string, unknown>, defaultMessage: string): AiEvaluationResult {
+  const validSummaryScore = Math.max(0, Math.min(20, typeof parsed.summaryScore === "number" ? parsed.summaryScore : 0));
+  const validWhyScore = Math.max(0, Math.min(15, typeof parsed.whyScore === "number" ? parsed.whyScore : 0));
+  return {
+    score: validSummaryScore + validWhyScore,
+    summaryScore: validSummaryScore,
+    whyScore: validWhyScore,
+    suggestedScope: typeof parsed.suggestedScope === "string" ? parsed.suggestedScope.trim() : "",
+    issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 3) : [],
+    suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [],
+    exampleMessage: typeof parsed.exampleMessage === "string" ? parsed.exampleMessage : defaultMessage,
+  };
+}
+
 export async function aiEvaluateCommit(
   message: string,
   options?: { signal?: AbortSignal },
@@ -53,38 +144,36 @@ export async function aiEvaluateCommit(
     return null;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-  if (options?.signal) {
-    options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  const cached = batchCache.get(message);
+  if (cached !== undefined) {
+    batchCache.delete(message);
+    return cached;
   }
 
+  checkDailyReset();
+  if (dailyCount >= RPD_LIMIT) {
+    logger.warn("[aiEvaluate] Daily request limit reached, skipping AI evaluation");
+    return null;
+  }
+
+  dailyCount++;
+
   try {
-    const response = await fetch(GEMINI_API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: EVALUATION_PROMPT },
-              { text: `評価対象のコミットメッセージ:\n\`\`\`\n${message}\n\`\`\`` },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 256,
-          responseMimeType: "application/json",
+    const response = await callGemini({
+      contents: [
+        {
+          parts: [
+            { text: EVALUATION_PROMPT },
+            { text: `評価対象のコミットメッセージ:\n\`\`\`\n${message}\n\`\`\`` },
+          ],
         },
-      }),
-    });
-    clearTimeout(timeoutId);
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 256,
+        responseMimeType: "application/json",
+      },
+    }, options);
 
     if (response.status === 429) {
       logger.warn("[aiEvaluate] Rate limited (429), skipping AI evaluation");
@@ -105,21 +194,8 @@ export async function aiEvaluateCommit(
     }
 
     const parsed = JSON.parse(text);
-
-    const validSummaryScore = Math.max(0, Math.min(20, typeof parsed.summaryScore === "number" ? parsed.summaryScore : 0));
-    const validWhyScore = Math.max(0, Math.min(15, typeof parsed.whyScore === "number" ? parsed.whyScore : 0));
-
-    return {
-      score: validSummaryScore + validWhyScore,
-      summaryScore: validSummaryScore,
-      whyScore: validWhyScore,
-      suggestedScope: typeof parsed.suggestedScope === "string" ? parsed.suggestedScope.trim() : "",
-      issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 3) : [],
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [],
-      exampleMessage: typeof parsed.exampleMessage === "string" ? parsed.exampleMessage : message,
-    };
+    return parseSingleResult(parsed, message);
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === "AbortError") {
       if (options?.signal?.aborted) return null;
       logger.warn("[aiEvaluate] Timeout, skipping AI evaluation");
@@ -127,5 +203,82 @@ export async function aiEvaluateCommit(
     }
     logger.error("[aiEvaluate] Evaluation failed:", error instanceof Error ? error.message : "Unknown error");
     return null;
+  }
+}
+
+export async function aiEvaluateBatch(
+  messages: string[],
+  options?: { signal?: AbortSignal },
+): Promise<(AiEvaluationResult | null)[]> {
+  if (messages.length === 0) return [];
+  if (options?.signal?.aborted) return messages.map(() => null);
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey.trim().length === 0) {
+    return messages.map(() => null);
+  }
+
+  checkDailyReset();
+  if (dailyCount >= RPD_LIMIT) {
+    logger.warn("[aiEvaluate] Daily request limit reached, skipping batch AI evaluation");
+    messages.forEach(msg => batchCache.set(msg, null));
+    return messages.map(() => null);
+  }
+
+  dailyCount++;
+
+  try {
+    const numberedMessages = messages.map((m, i) => `${i + 1}. ${m}`).join("\n");
+    const response = await callGemini({
+      contents: [
+        {
+          parts: [
+            { text: BATCH_PROMPT },
+            { text: `評価対象のコミットメッセージ:\n${numberedMessages}` },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 1024,
+        responseMimeType: "application/json",
+      },
+    }, options);
+
+    if (response.status === 429) {
+      messages.forEach(msg => batchCache.set(msg, null));
+      return messages.map(() => null);
+    }
+    if (!response.ok) {
+      messages.forEach(msg => batchCache.set(msg, null));
+      return messages.map(() => null);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      messages.forEach(msg => batchCache.set(msg, null));
+      return messages.map(() => null);
+    }
+
+    const parsed = JSON.parse(text);
+    const results = Array.isArray(parsed) ? parsed : [parsed];
+
+    return messages.map((msg, i) => {
+      const item = results[i];
+      if (!item || typeof item !== "object") {
+        batchCache.set(msg, null);
+        return null;
+      }
+      const parsed = parseSingleResult(item, msg);
+      batchCache.set(msg, parsed);
+      return parsed;
+    });
+  } catch (error) {
+    messages.forEach(msg => batchCache.set(msg, null));
+    if (error instanceof Error && error.name === "AbortError") {
+      if (options?.signal?.aborted) return messages.map(() => null);
+    }
+    return messages.map(() => null);
   }
 }

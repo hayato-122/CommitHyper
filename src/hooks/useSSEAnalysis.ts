@@ -11,6 +11,8 @@ export type AnalyzeState = {
   score?: number;
   estimatedSecondsRemaining?: number;
   initialAvg?: number;
+  rpdExceeded?: boolean;
+  rpdMessage?: string;
 };
 
 export function useSSEAnalysis() {
@@ -29,6 +31,7 @@ export function useSSEAnalysis() {
       onRuleComplete?: (data: Record<string, unknown>) => void;
       onAIComplete?: (data: Record<string, unknown>) => void;
       onError?: () => void;
+      onRpdExceeded?: (data: Record<string, unknown>) => void;
     }) => {
       stopAnalysis();
 
@@ -90,11 +93,28 @@ export function useSSEAnalysis() {
         }));
       });
 
+      evtSource.addEventListener("rpd_exceeded", (e) => {
+        const data = JSON.parse(e.data);
+        setAnalyzeState((prev) => (prev ? { ...prev, rpdExceeded: true, rpdMessage: data.message } : null));
+        callbacks.onRpdExceeded?.(data);
+      });
+
       evtSource.addEventListener("ai_complete", (e) => {
         const data = JSON.parse(e.data);
         setAnalyzeState(null);
         evtSource.close();
         evtSourceRef.current = null;
+        callbacks.onAIComplete?.(data);
+      });
+
+      evtSource.addEventListener("cancelled", (e) => {
+        const data = JSON.parse(e.data);
+        setAnalyzeState(null);
+        evtSource.close();
+        evtSourceRef.current = null;
+        if (data.commits) {
+          callbacks.onRuleComplete?.(data);
+        }
         callbacks.onAIComplete?.(data);
       });
 

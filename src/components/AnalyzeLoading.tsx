@@ -92,6 +92,12 @@ export function AnalyzeLoading({ owner, name, state }: Props) {
           </div>
         </div>
 
+        {state.rpdExceeded && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
+            <p className="text-xs text-amber-700">{state.rpdMessage || "1日のAI評価上限に達しました。ルールベースの評価のみ表示します。"}</p>
+          </div>
+        )}
+
         {isAiPhase && state.currentMessage && (
           <div className="rounded-2xl border border-mist bg-white p-4">
             <p className="mb-1 text-caption font-medium text-zinc-400">評価中</p>
