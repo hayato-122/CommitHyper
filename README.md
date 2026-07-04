@@ -34,7 +34,7 @@ GitHub リポジトリのコミットメッセージを分析・評価し、改�
 
 |                     分析開始 → SSE進捗アニメーション                     |                     結果画面の操作                          |
 | :----------------------------------------------------------------------: | :--------------------------------------------------------: |
-| <img src="public/images/evaluate-loading.webp" width="100%" alt="分析開始 → SSE進捗アニメーション"> | <img src="public/images/results-interaction.webp" width="100%" alt="結果画面の操作"> |
+| <img src="public/images/evaluate-loading.webp" width="100%" alt="分析開始 → SSE進捗アニメーション"> | <img src="public/images/results-interaction.png" width="100%" alt="結果画面"> |
 
 |                     改善画面（メッセージ編集→再評価）                    |
 | :----------------------------------------------------------------------: |
