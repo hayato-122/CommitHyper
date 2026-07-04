@@ -34,11 +34,11 @@ GitHub リポジトリのコミットメッセージを分析・評価し、改�
 
 |                     分析開始 → SSE進捗アニメーション                     |                     結果画面の操作                          |
 | :----------------------------------------------------------------------: | :--------------------------------------------------------: |
-| <video autoplay loop muted playsinline width="100%"><source src="https://raw.githubusercontent.com/hayato-122/CommitHyper/main/public/images/evaluate-loading.mp4" type="video/mp4"><img src="public/images/evaluate-result.png" width="100%" alt="分析開始 → SSE進捗アニメーション"></video> | <video autoplay loop muted playsinline width="100%"><source src="https://raw.githubusercontent.com/hayato-122/CommitHyper/main/public/images/results-interaction.mp4" type="video/mp4"><img src="public/images/evaluate-result.png" width="100%" alt="結果画面の操作"></video> |
+| <video autoplay loop muted playsinline width="100%"><source src="https://raw.githubusercontent.com/hayato-122/CommitHyper/feature/dashboard/public/images/evaluate-loading.mp4" type="video/mp4"><img src="public/images/evaluate-result.png" width="100%" alt="分析開始 → SSE進捗アニメーション"></video> | <video autoplay loop muted playsinline width="100%"><source src="https://raw.githubusercontent.com/hayato-122/CommitHyper/feature/dashboard/public/images/results-interaction.mp4" type="video/mp4"><img src="public/images/evaluate-result.png" width="100%" alt="結果画面の操作"></video> |
 
 |                     改善画面（メッセージ編集→再評価）                    |
 | :----------------------------------------------------------------------: |
-| <video autoplay loop muted playsinline width="100%"><source src="https://raw.githubusercontent.com/hayato-122/CommitHyper/main/public/images/improve-commit.mp4" type="video/mp4"><img src="public/images/improve-score.png" width="100%" alt="改善画面（メッセージ編集→再評価）"></video> |
+| <video autoplay loop muted playsinline width="100%"><source src="https://raw.githubusercontent.com/hayato-122/CommitHyper/feature/dashboard/public/images/improve-commit.mp4" type="video/mp4"><img src="public/images/improve-score.png" width="100%" alt="改善画面（メッセージ編集→再評価）"></video> |
 
 ### 📖 ガイドページ
 
