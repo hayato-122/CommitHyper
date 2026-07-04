@@ -34,11 +34,11 @@ GitHub リポジトリのコミットメッセージを分析・評価し、改�
 
 |                     分析開始 → SSE進捗アニメーション                     |                     結果画面の操作                          |
 | :----------------------------------------------------------------------: | :--------------------------------------------------------: |
-| <a href="public/images/evaluate-loading.mp4"><img src="public/images/evaluate-result.png" width="100%" alt="分析開始 → SSE進捗アニメーション"></a> | <a href="public/images/results-interaction.mp4"><img src="public/images/evaluate-result.png" width="100%" alt="結果画面の操作"></a> |
+| <video src="public/images/evaluate-loading.mp4" width="100%" autoplay loop muted playsinline></video> | <video src="public/images/results-interaction.mp4" width="100%" autoplay loop muted playsinline></video> |
 
 |                     改善画面（メッセージ編集→再評価）                    |
 | :----------------------------------------------------------------------: |
-| <a href="public/images/improve-commit.mp4"><img src="public/images/improve-score.png" width="100%" alt="改善画面（メッセージ編集→再評価）"></a> |
+| <video src="public/images/improve-commit.mp4" width="100%" autoplay loop muted playsinline></video> |
 
 ### 📖 ガイドページ
 
