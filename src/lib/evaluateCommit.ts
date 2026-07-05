@@ -297,7 +297,7 @@ function filterContradictoryIssues(
   issues: string[],
   ruleAspects: AspectScores,
 ): string[] {
-  const hasSpecificInfo = ruleAspects.summary >= 20;
+  const hasSpecificInfo = ruleAspects.summary >= 10;
   const hasBody = ruleAspects.why >= 15;
 
   return issues.filter((issue) => {
@@ -325,12 +325,20 @@ export function combineWithAi(
 
   const { aspectScores } = ruleResult;
 
+  // AIが0点をつけたがルールが内容ありと判断→AI評価失敗とみなしルール値を下限に
+  const finalSummaryScore = aiResult.summaryScore === 0 && aspectScores.summary > 0
+    ? aspectScores.summary
+    : aiResult.summaryScore;
+  const finalWhyScore = aiResult.whyScore === 0 && aspectScores.why > 0
+    ? aspectScores.why
+    : aiResult.whyScore;
+
   // ルール: 観点1+2+5+6 (65点満点) + AI: 観点3+4 (35点満点)
   let combinedScore =
     aspectScores.format +
     aspectScores.type +
-    aiResult.summaryScore +
-    aiResult.whyScore +
+    finalSummaryScore +
+    finalWhyScore +
     aspectScores.readability +
     aspectScores.traceability;
 
@@ -358,8 +366,8 @@ export function combineWithAi(
     rank,
     aspectScores: {
       ...aspectScores,
-      summary: aiResult.summaryScore,
-      why: aiResult.whyScore,
+      summary: finalSummaryScore,
+      why: finalWhyScore,
     },
     issues: allIssues,
     suggestions: allSuggestions,
