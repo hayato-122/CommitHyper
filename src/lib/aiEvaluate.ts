@@ -107,6 +107,15 @@ export function isAiRpdExceeded(): boolean {
   return dailyCount >= RPD_LIMIT;
 }
 
+// --- Skip reason tracking ---
+let lastSkipReason: AiSkippedReason | null = null;
+
+export function getLastSkipReason(): AiSkippedReason | null {
+  const r = lastSkipReason;
+  lastSkipReason = null;
+  return r;
+}
+
 // --- Batch result cache ---
 const batchCache = new Map<string, AiEvaluationResult | null>();
 
@@ -156,11 +165,15 @@ export async function aiEvaluateCommit(
   message: string,
   options?: { signal?: AbortSignal },
 ): Promise<AiEvaluationResult | null> {
-  if (options?.signal?.aborted) return null;
+  if (options?.signal?.aborted) {
+    lastSkipReason = { reason: "error", message: "aborted" };
+    return null;
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.trim().length === 0) {
     logger.info("[aiEvaluate] GEMINI_API_KEY not set, skipping AI evaluation");
+    lastSkipReason = { reason: "no_key" };
     return null;
   }
 
@@ -173,6 +186,7 @@ export async function aiEvaluateCommit(
   checkDailyReset();
   if (dailyCount >= RPD_LIMIT) {
     logger.warn("[aiEvaluate] Daily request limit reached, skipping AI evaluation");
+    lastSkipReason = { reason: "quota_exceeded" };
     return null;
   }
 
@@ -197,12 +211,14 @@ export async function aiEvaluateCommit(
 
     if (response.status === 429) {
       logger.warn("[aiEvaluate] Rate limited (429), skipping AI evaluation");
+      lastSkipReason = { reason: "rate_limited", retryAfterSeconds: 60 };
       return null;
     }
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "unknown");
       logger.error(`[aiEvaluate] Gemini API error: ${response.status} ${response.statusText}`, errorBody.slice(0, 500));
+      lastSkipReason = { reason: "error", message: `Gemini API error: ${response.status}` };
       return null;
     }
 
@@ -210,6 +226,7 @@ export async function aiEvaluateCommit(
     const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
       logger.error("[aiEvaluate] Empty response from Gemini API");
+      lastSkipReason = { reason: "error", message: "Empty response from Gemini API" };
       return null;
     }
 
@@ -217,11 +234,16 @@ export async function aiEvaluateCommit(
     return parseSingleResult(parsed, message);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      if (options?.signal?.aborted) return null;
+      if (options?.signal?.aborted) {
+        lastSkipReason = { reason: "error", message: "aborted" };
+        return null;
+      }
       logger.warn("[aiEvaluate] Timeout, skipping AI evaluation");
+      lastSkipReason = { reason: "error", message: "Timeout" };
       return null;
     }
     logger.error("[aiEvaluate] Evaluation failed:", error instanceof Error ? error.message : "Unknown error");
+    lastSkipReason = { reason: "error", message: error instanceof Error ? error.message : "Unknown error" };
     return null;
   }
 }

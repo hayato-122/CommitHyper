@@ -18,6 +18,12 @@ type AspectScores = {
   traceability: number;
 };
 
+type AiReason =
+  | { reason: "no_key" }
+  | { reason: "rate_limited"; retryAfterSeconds?: number }
+  | { reason: "error"; message?: string }
+  | { reason: "quota_exceeded" };
+
 type EvalData = {
   score: number;
   rank: string;
@@ -27,6 +33,7 @@ type EvalData = {
   passed?: boolean;
   aspectScores?: AspectScores;
   aiAvailable?: boolean;
+  aiReason?: AiReason | null;
 };
 
 function ImproveContent() {
@@ -194,6 +201,7 @@ function ImproveContent() {
                   passed={activeEval.passed}
                   aspectScores={activeEval.aspectScores}
                   aiAvailable={activeEval.aiAvailable}
+                  aiReason={activeEval.aiReason}
                 />
               </ScrollReveal>
             )}

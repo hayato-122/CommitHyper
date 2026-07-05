@@ -1,5 +1,5 @@
 import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
-import { aiEvaluateCommit } from "@/lib/aiEvaluate";
+import { aiEvaluateCommit, getLastSkipReason } from "@/lib/aiEvaluate";
 import { ImproveMessageSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
@@ -24,5 +24,6 @@ export async function POST(request: Request) {
     aspectScores: combined.aspectScores,
     passed: combined.score >= SCORE.GOOD,
     aiAvailable: !!aiResult,
+    aiReason: aiResult ? null : getLastSkipReason(),
   });
 }
