@@ -54,9 +54,7 @@ function aiMessage(aiReason?: AiReason | null): string | null {
     case "rate_limited":
       return "AI評価のAPI制限中です。しばらく待ってから再試行してください。";
     case "error":
-      return aiReason.message
-        ? `AI評価でエラーが発生しました: ${aiReason.message}`
-        : "AI評価でエラーが発生しました。";
+      return "AI評価でエラーが発生しました。再度試してください。";
     default:
       return null;
   }

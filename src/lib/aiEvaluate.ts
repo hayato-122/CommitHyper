@@ -166,7 +166,7 @@ export async function aiEvaluateCommit(
   options?: { signal?: AbortSignal },
 ): Promise<AiEvaluationResult | null> {
   if (options?.signal?.aborted) {
-    lastSkipReason = { reason: "error", message: "aborted" };
+    lastSkipReason = { reason: "error", message: "cancelled" };
     return null;
   }
 
@@ -204,7 +204,7 @@ export async function aiEvaluateCommit(
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 256,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json",
       },
     }, options);
@@ -226,24 +226,31 @@ export async function aiEvaluateCommit(
     const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
       logger.error("[aiEvaluate] Empty response from Gemini API");
-      lastSkipReason = { reason: "error", message: "Empty response from Gemini API" };
+      lastSkipReason = { reason: "error", message: "empty_response" };
       return null;
     }
 
-    const parsed = JSON.parse(text);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      logger.error("[aiEvaluate] JSON parse error, raw text (first 200):", text.slice(0, 200));
+      lastSkipReason = { reason: "error", message: "parse_error" };
+      return null;
+    }
     return parseSingleResult(parsed, message);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       if (options?.signal?.aborted) {
-        lastSkipReason = { reason: "error", message: "aborted" };
+        lastSkipReason = { reason: "error", message: "cancelled" };
         return null;
       }
       logger.warn("[aiEvaluate] Timeout, skipping AI evaluation");
-      lastSkipReason = { reason: "error", message: "Timeout" };
+      lastSkipReason = { reason: "error", message: "timeout" };
       return null;
     }
     logger.error("[aiEvaluate] Evaluation failed:", error instanceof Error ? error.message : "Unknown error");
-    lastSkipReason = { reason: "error", message: error instanceof Error ? error.message : "Unknown error" };
+    lastSkipReason = { reason: "error", message: "evaluation_failed" };
     return null;
   }
 }
