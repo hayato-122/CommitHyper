@@ -67,6 +67,7 @@ export async function runSSEPipeline<T>(
   clearBatchCache();
   let rpdExceeded = false;
   const totalBatches = Math.ceil(ruleItems.length / BATCH_SIZE);
+  let avgBatchTime = 0;
 
   for (let batchStart = 0; batchStart < ruleItems.length; batchStart += BATCH_SIZE) {
     if (isCancelled()) break;
@@ -75,14 +76,27 @@ export async function runSSEPipeline<T>(
     const batchEnd = Math.min(batchStart + BATCH_SIZE, ruleItems.length);
     const batchMessages = commits.slice(batchStart, batchEnd).map((c) => c.commit.message);
 
-    send("progress", {
-      phase: "ai_batch",
-      current: batchIndex + 1,
-      total: totalBatches,
-      message: `AI評価中... (${batchIndex + 1}/${totalBatches}バッチ)`,
-    });
-
+    const batchStartTime = Date.now();
     const results = await aiEvaluateBatch(batchMessages, options);
+    const batchElapsed = Date.now() - batchStartTime;
+
+    // 実測時間から平均を更新（最初のバッチで初期化）
+    if (avgBatchTime === 0) {
+      avgBatchTime = batchElapsed;
+    } else {
+      avgBatchTime = avgBatchTime * 0.7 + batchElapsed * 0.3;
+    }
+
+    const remaining = Math.round(
+      (avgBatchTime + RPM_DELAY_MS) * (totalBatches - batchIndex - 1) / 1000,
+    );
+
+    send("ai_progress", {
+      current: batchEnd,
+      total: ruleItems.length,
+      currentMessage: batchMessages[0]?.slice(0, 60) ?? "",
+      estimatedSecondsRemaining: Math.max(0, remaining),
+    });
 
     if (results.every((r) => r === null)) {
       if (isAiRpdExceeded()) {
