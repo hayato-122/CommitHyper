@@ -12,7 +12,7 @@ export async function evaluateWithAi(
   return { combined, aiResult };
 }
 
-const BATCH_SIZE = 3;
+const BATCH_SIZE = 5;
 const RPM_DELAY_MS = 4000;
 
 export async function runSSEPipeline<T>(
@@ -66,12 +66,21 @@ export async function runSSEPipeline<T>(
   // Phase 3a: Batch-precompute AI results
   clearBatchCache();
   let rpdExceeded = false;
+  const totalBatches = Math.ceil(ruleItems.length / BATCH_SIZE);
 
   for (let batchStart = 0; batchStart < ruleItems.length; batchStart += BATCH_SIZE) {
     if (isCancelled()) break;
 
+    const batchIndex = batchStart / BATCH_SIZE;
     const batchEnd = Math.min(batchStart + BATCH_SIZE, ruleItems.length);
     const batchMessages = commits.slice(batchStart, batchEnd).map((c) => c.commit.message);
+
+    send("progress", {
+      phase: "ai_batch",
+      current: batchIndex + 1,
+      total: totalBatches,
+      message: `AI評価中... (${batchIndex + 1}/${totalBatches}バッチ)`,
+    });
 
     const results = await aiEvaluateBatch(batchMessages, options);
 
