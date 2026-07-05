@@ -185,7 +185,17 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
       issues.push("変更内容が曖昧です。何を変更したか具体的に書いてください。");
       suggestions.push("変更した機能・画面・処理の名前を含めてください。");
     }
-  } else if (summary.length < 10 && summary.length > 0) {
+  } else if (summary.length > 100) {
+    if (containsSpecificInfo(summary)) {
+      aspectScores.summary = 10;
+      score += 10;
+    } else {
+      aspectScores.summary = 5;
+      score += 5;
+    }
+    issues.push("100文字を超えています。summaryは簡潔に（72文字以内）要約し、詳細はbodyに移してください。");
+    suggestions.push("例: `fix(api): SSEパイプラインの中断処理を実装する` として、詳細はbodyに箇条書きで");
+  } else if (summary.length > 0) {
     if (isJapanese(summary) && summary.length <= 4) {
       issues.push("変更内容が短すぎて何をしたか分かりません。");
       suggestions.push("具体的な変更内容を書いてください。例: `ログインエラーの表示を修正する`");
