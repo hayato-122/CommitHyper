@@ -272,6 +272,34 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
 /**
  * ルールベース評価（観点1,2,5,6）とAI評価（観点3,4）を統合する
  */
+const CONTRADICTORY_ISSUES = [
+  /変更内容が全く書かれていません/,
+  /何を変更したか分かりません/,
+  /変更内容が書かれていない/,
+  /何も書かれていません/,
+  /bodyが空/,
+  /なぜ変更したか(不明|分かりません|書かれていません)/,
+  /背景が(不明|分かりません|書かれていない)/,
+  /Whyが(不明|分かりません|書かれていない|不足)/,
+];
+
+function filterContradictoryIssues(
+  issues: string[],
+  ruleAspects: AspectScores,
+): string[] {
+  const hasSpecificInfo = ruleAspects.summary >= 20;
+  const hasBody = ruleAspects.why >= 15;
+
+  return issues.filter((issue) => {
+    for (const pattern of CONTRADICTORY_ISSUES) {
+      if (!pattern.test(issue)) continue;
+      if (hasSpecificInfo && /(変更内容|何を変更|何も)/i.test(issue)) return false;
+      if (hasBody && /(body|なぜ|Why|背景)/i.test(issue)) return false;
+    }
+    return true;
+  });
+}
+
 export function combineWithAi(
   ruleResult: CommitEvaluationResult,
   aiResult: {
@@ -304,7 +332,8 @@ export function combineWithAi(
   const rank = getRank(combinedScore);
 
   // issues/suggestions はAIとルールを統合（重複除去）
-  const allIssues = [...new Set([...ruleResult.issues, ...aiResult.issues])];
+  const filteredAiIssues = filterContradictoryIssues(aiResult.issues, aspectScores);
+  const allIssues = [...new Set([...ruleResult.issues, ...filteredAiIssues])];
   const allSuggestions = [...new Set([...ruleResult.suggestions, ...aiResult.suggestions])];
 
   // AIがscope提案をしている場合、suggestionsに追加
