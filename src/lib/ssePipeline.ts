@@ -1,6 +1,6 @@
 import type { GitHubCommit } from "@/lib/github";
 import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
-import { aiEvaluateCommit, aiEvaluateBatch, clearBatchCache, isAiRpdExceeded } from "@/lib/aiEvaluate";
+import { aiEvaluateCommit, aiEvaluateBatch, clearBatchCache, isAiRpdExceeded, RPD_LIMIT } from "@/lib/aiEvaluate";
 
 export async function evaluateWithAi(
   message: string,
@@ -21,7 +21,7 @@ export async function runSSEPipeline<T>(
   onRuleItem: (commit: GitHubCommit, index: number, total: number) => Promise<T>,
   onAiItem: (item: T, commit: GitHubCommit, index: number, total: number) => Promise<T>,
   getScore: (item: T) => number,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; onRuleBatchReady?: (ruleItems: T[], commits: GitHubCommit[]) => Promise<T[]> },
 ): Promise<{ items: T[]; initialAvg: number; currentAvg: number }> {
   const signal = options?.signal;
 
@@ -31,13 +31,18 @@ export async function runSSEPipeline<T>(
 
   // Phase 2: Rule evaluation
   send("phase", { name: "rule", message: "ルールベース評価中..." });
-  const ruleItems: T[] = [];
+  let ruleItems: T[] = [];
 
   for (let i = 0; i < commits.length; i++) {
     if (isCancelled()) break;
     const item = await onRuleItem(commits[i], i, commits.length);
     ruleItems.push(item);
     send("progress", { phase: "rule", current: i + 1, total: commits.length });
+  }
+
+  // ルール評価結果の一括永続化（DB書き込み等）
+  if (options?.onRuleBatchReady) {
+    ruleItems = await options.onRuleBatchReady(ruleItems, commits);
   }
 
   const initialAvg = calcAvg(ruleItems, getScore);
@@ -83,7 +88,7 @@ export async function runSSEPipeline<T>(
   }
 
   if (rpdExceeded) {
-    send("rpd_exceeded", { message: "1日のAI評価上限(20件)に達しました。ルールベースの評価のみ表示します。" });
+    send("rpd_exceeded", { message: `1日のAI評価上限(${RPD_LIMIT}件)に達しました。ルールベースの評価のみ表示します。` });
   }
 
   // Phase 3b: Apply AI results through per-commit callbacks (cache hits, no API calls)

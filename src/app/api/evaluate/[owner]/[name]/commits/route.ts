@@ -92,8 +92,14 @@ export async function GET(
       const githubCommits = await fetchAllCommits(owner, name, token, branch, limit);
       sse.send("progress", { phase: "fetch_done", current: githubCommits.length, total: githubCommits.length, message: `${githubCommits.length}件のコミットを取得完了` });
 
+      const evaluableCommits = githubCommits.filter((c) => !isMergeMessage(c.commit.message));
+      const skippedCount = githubCommits.length - evaluableCommits.length;
+      if (skippedCount > 0) {
+        sse.send("merge_skipped", { count: skippedCount, message: `${skippedCount}件のマージコミットをスキップしました` });
+      }
+
       const { items } = await runSSEPipeline(
-        githubCommits,
+        evaluableCommits,
         sse.send,
         (commit) => onRuleEval(commit),
         (item, commit) => onAiEval(item, commit, request.signal),

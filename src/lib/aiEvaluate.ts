@@ -69,7 +69,7 @@ const BATCH_PROMPT = [
 // --- Daily request counter ---
 let dailyCount = 0;
 let dailyResetDate = "";
-const RPD_LIMIT = 20;
+export const RPD_LIMIT = Number(process.env.AI_RPD_LIMIT) || 500;
 
 function checkDailyReset() {
   const today = new Date().toISOString().slice(0, 10);
