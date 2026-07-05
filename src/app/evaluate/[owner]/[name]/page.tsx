@@ -105,7 +105,37 @@ export default function EvaluatePage() {
         const data = await branchesRes.json();
         if (Array.isArray(data) && data.length > 0) {
           setBranches(data);
-          setSelectedBranch(data[0]);
+          const branch = data[0];
+          setSelectedBranch(branch);
+
+          // ローカルキャッシュがあればブランチ選択をスキップ
+          const localCache = loadLocalCache(branch);
+          if (localCache) {
+            setAllCommits(localCache);
+            setStartable(false);
+            setLoading(false);
+            return;
+          }
+
+          // サーバーキャッシュを確認
+          try {
+            const qs = new URLSearchParams({ status: "true", branch });
+            const statusRes = await fetch(`/api/evaluate/${owner}/${name}/commits?${qs}`);
+            if (statusRes.ok) {
+              const status = await statusRes.json();
+              if (status.cached) {
+                const res = await fetch(`/api/evaluate/${owner}/${name}/commits?branch=${encodeURIComponent(branch)}`);
+                if (res.ok) {
+                  const commits: EvalCommit[] = await res.json();
+                  saveLocalCache(branch, commits);
+                  setAllCommits(commits);
+                  setStartable(false);
+                  setLoading(false);
+                  return;
+                }
+              }
+            }
+          } catch { /* fall through to branch selection */ }
         }
       }
       setStartable(true);

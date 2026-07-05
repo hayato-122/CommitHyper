@@ -149,6 +149,21 @@ export default function DashboardPage() {
         setProgress(data);
       }
 
+      // 既に分析済みのコミットがあればブランチ選択をスキップ
+      try {
+        const statusRes = await fetch(`/api/repos/${owner}/${name}/commits?status=true`);
+        if (statusRes.ok) {
+          const status = await statusRes.json();
+          if (status.analyzed) {
+            await loadAllCommits(false);
+            if (cancelled) return;
+            setStartable(false);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch { /* fall through to branch selection */ }
+
       if (cancelled) return;
       setStartable(true);
       setLoading(false);
