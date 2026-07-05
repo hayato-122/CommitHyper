@@ -54,7 +54,7 @@ function getRank(score: number): CommitEvaluationResult["rank"] {
 }
 
 export function isMergeMessage(message: string): boolean {
-  return /^merge (pull request|branch|remote-tracking branch|tag)/i.test(message);
+  return /^merge\b/i.test(message.trim());
 }
 
 export function evaluateCommit(message: string): CommitEvaluationResult {
