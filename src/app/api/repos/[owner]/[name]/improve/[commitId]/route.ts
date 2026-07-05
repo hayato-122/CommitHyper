@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { evaluateCommit, combineWithAi, SCORE } from "@/lib/evaluateCommit";
 import { aiEvaluateCommit } from "@/lib/aiEvaluate";
 import { safeParseJson } from "@/lib/json";
-import { fetchSingleCommit } from "@/lib/github";
+import { fetchAllCommits } from "@/lib/github";
 import { ImproveMessageSchema } from "@/lib/validation";
 
 export async function GET(
@@ -121,18 +121,38 @@ export async function PUT(
     return Response.json({ error: "Commit not found" }, { status: 404 });
   }
 
-  // GitHub上の実際のコミットメッセージを検証
-  const githubCommit = await fetchSingleCommit(owner, name, commit.sha, session.accessToken!);
-  const actualMessage = githubCommit.commit.message.trim();
-  const expectedMessage = improvedMessage.trim();
-  const verified = actualMessage === expectedMessage;
+  // ブランチの最新コミットから改善メッセージを探索（rebase後もSHA不変）
+  const branch = parsed.data.branch;
+  let newSha = commit.sha;
 
-  if (!verified) {
-    return Response.json({
-      error: "GitHub上のコミットメッセージが変更されていません。手順に従って修正してから再度お試しください。",
-      verified: false,
-      actualMessage,
-    }, { status: 400 });
+  if (branch) {
+    try {
+      const branchCommits = await fetchAllCommits(owner, name, session.accessToken!, branch, 20);
+      const matched = branchCommits.find(
+        (c) => c.commit.message.trim() === improvedMessage.trim(),
+      );
+      if (matched) {
+        newSha = matched.sha;
+      } else {
+        return Response.json({
+          error: "改善後のメッセージがGitHub上で見つかりません。正しくプッシュされていません。git push --force-with-lease を実行してから再度お試しください。",
+          verified: false,
+        }, { status: 400 });
+      }
+    } catch {
+      return Response.json({
+        error: "GitHubからのコミット取得に失敗しました。アクセストークンが有効か確認してください。",
+        verified: false,
+      }, { status: 500 });
+    }
+  }
+
+  // SHAが変わっていたらDB更新（rebase後など）
+  if (newSha !== commit.sha) {
+    await prisma.commit.update({
+      where: { id: commit.id },
+      data: { sha: newSha },
+    });
   }
 
   const ruleResult = evaluateCommit(improvedMessage);

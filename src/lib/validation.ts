@@ -10,6 +10,7 @@ export const SelectRepoSchema = z.object({
 
 export const ImproveMessageSchema = z.object({
   message: z.string().min(1).max(10000),
+  branch: z.string().optional(),
 });
 
 export const CandidatesQuerySchema = z.object({
