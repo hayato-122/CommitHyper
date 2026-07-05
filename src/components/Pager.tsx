@@ -24,7 +24,7 @@ export function Pager({ page, totalPages, totalCount, onPageChange }: PagerProps
   }
 
   return (
-    <div className="mt-6 flex items-center justify-center gap-1">
+    <div className="mt-auto flex items-center justify-center gap-1 pt-6">
       {/* First page */}
       <button
         onClick={() => onPageChange(1)}
