@@ -54,7 +54,7 @@ function getRank(score: number): CommitEvaluationResult["rank"] {
 }
 
 export function isMergeMessage(message: string): boolean {
-  return /^merge (pull request|branch|remote-tracking branch|tag)/i.test(message);
+  return /^merge\b/i.test(message.trim());
 }
 
 export function evaluateCommit(message: string): CommitEvaluationResult {
@@ -185,7 +185,17 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
       issues.push("変更内容が曖昧です。何を変更したか具体的に書いてください。");
       suggestions.push("変更した機能・画面・処理の名前を含めてください。");
     }
-  } else if (summary.length < 10 && summary.length > 0) {
+  } else if (summary.length > 100) {
+    if (containsSpecificInfo(summary)) {
+      aspectScores.summary = 10;
+      score += 10;
+    } else {
+      aspectScores.summary = 5;
+      score += 5;
+    }
+    issues.push("100文字を超えています。summaryは簡潔に（72文字以内）要約し、詳細はbodyに移してください。");
+    suggestions.push("例: `fix(api): SSEパイプラインの中断処理を実装する` として、詳細はbodyに箇条書きで");
+  } else if (summary.length > 0) {
     if (isJapanese(summary) && summary.length <= 4) {
       issues.push("変更内容が短すぎて何をしたか分かりません。");
       suggestions.push("具体的な変更内容を書いてください。例: `ログインエラーの表示を修正する`");
@@ -272,6 +282,34 @@ export function evaluateCommit(message: string): CommitEvaluationResult {
 /**
  * ルールベース評価（観点1,2,5,6）とAI評価（観点3,4）を統合する
  */
+const CONTRADICTORY_ISSUES = [
+  /変更内容が全く書かれていません/,
+  /何を変更したか分かりません/,
+  /変更内容が書かれていない/,
+  /何も書かれていません/,
+  /bodyが空/,
+  /なぜ変更したか(不明|分かりません|書かれていません)/,
+  /背景が(不明|分かりません|書かれていない)/,
+  /Whyが(不明|分かりません|書かれていない|不足)/,
+];
+
+function filterContradictoryIssues(
+  issues: string[],
+  ruleAspects: AspectScores,
+): string[] {
+  const hasSpecificInfo = ruleAspects.summary >= 10;
+  const hasBody = ruleAspects.why >= 15;
+
+  return issues.filter((issue) => {
+    for (const pattern of CONTRADICTORY_ISSUES) {
+      if (!pattern.test(issue)) continue;
+      if (hasSpecificInfo && /(変更内容|何を変更|何も)/i.test(issue)) return false;
+      if (hasBody && /(body|なぜ|Why|背景)/i.test(issue)) return false;
+    }
+    return true;
+  });
+}
+
 export function combineWithAi(
   ruleResult: CommitEvaluationResult,
   aiResult: {
@@ -287,12 +325,20 @@ export function combineWithAi(
 
   const { aspectScores } = ruleResult;
 
+  // AIが0点をつけたがルールが内容ありと判断→AI評価失敗とみなしルール値を下限に
+  const finalSummaryScore = aiResult.summaryScore === 0 && aspectScores.summary > 0
+    ? aspectScores.summary
+    : aiResult.summaryScore;
+  const finalWhyScore = aiResult.whyScore === 0 && aspectScores.why > 0
+    ? aspectScores.why
+    : aiResult.whyScore;
+
   // ルール: 観点1+2+5+6 (65点満点) + AI: 観点3+4 (35点満点)
   let combinedScore =
     aspectScores.format +
     aspectScores.type +
-    aiResult.summaryScore +
-    aiResult.whyScore +
+    finalSummaryScore +
+    finalWhyScore +
     aspectScores.readability +
     aspectScores.traceability;
 
@@ -304,7 +350,8 @@ export function combineWithAi(
   const rank = getRank(combinedScore);
 
   // issues/suggestions はAIとルールを統合（重複除去）
-  const allIssues = [...new Set([...ruleResult.issues, ...aiResult.issues])];
+  const filteredAiIssues = filterContradictoryIssues(aiResult.issues, aspectScores);
+  const allIssues = [...new Set([...ruleResult.issues, ...filteredAiIssues])];
   const allSuggestions = [...new Set([...ruleResult.suggestions, ...aiResult.suggestions])];
 
   // AIがscope提案をしている場合、suggestionsに追加
@@ -319,8 +366,8 @@ export function combineWithAi(
     rank,
     aspectScores: {
       ...aspectScores,
-      summary: aiResult.summaryScore,
-      why: aiResult.whyScore,
+      summary: finalSummaryScore,
+      why: finalWhyScore,
     },
     issues: allIssues,
     suggestions: allSuggestions,

@@ -1,6 +1,6 @@
 import type { GitHubCommit } from "@/lib/github";
 import { evaluateCommit, combineWithAi } from "@/lib/evaluateCommit";
-import { aiEvaluateCommit, aiEvaluateBatch, clearBatchCache, isAiRpdExceeded } from "@/lib/aiEvaluate";
+import { aiEvaluateCommit, aiEvaluateBatch, clearBatchCache, isAiRpdExceeded, RPD_LIMIT } from "@/lib/aiEvaluate";
 
 
 export async function evaluateWithAi(
@@ -13,7 +13,7 @@ export async function evaluateWithAi(
   return { combined, aiResult };
 }
 
-const BATCH_SIZE = 3;
+const BATCH_SIZE = 5;
 const RPM_DELAY_MS = 4000;
 
 export async function runSSEPipeline<T>(
@@ -22,7 +22,7 @@ export async function runSSEPipeline<T>(
   onRuleItem: (commit: GitHubCommit, index: number, total: number) => Promise<T>,
   onAiItem: (item: T, commit: GitHubCommit, index: number, total: number) => Promise<T>,
   getScore: (item: T) => number,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; onRuleBatchReady?: (ruleItems: T[], commits: GitHubCommit[]) => Promise<T[]> },
 ): Promise<{ items: T[]; initialAvg: number; currentAvg: number }> {
   const signal = options?.signal;
 
@@ -32,13 +32,18 @@ export async function runSSEPipeline<T>(
 
   // Phase 2: Rule evaluation
   send("phase", { name: "rule", message: "ルールベース評価中..." });
-  const ruleItems: T[] = [];
+  let ruleItems: T[] = [];
 
   for (let i = 0; i < commits.length; i++) {
     if (isCancelled()) break;
     const item = await onRuleItem(commits[i], i, commits.length);
     ruleItems.push(item);
     send("progress", { phase: "rule", current: i + 1, total: commits.length });
+  }
+
+  // ルール評価結果の一括永続化（DB書き込み等）
+  if (options?.onRuleBatchReady) {
+    ruleItems = await options.onRuleBatchReady(ruleItems, commits);
   }
 
   const initialAvg = calcAvg(ruleItems, getScore);
@@ -62,14 +67,37 @@ export async function runSSEPipeline<T>(
   // Phase 3a: Batch-precompute AI results
   clearBatchCache();
   let rpdExceeded = false;
+  const totalBatches = Math.ceil(ruleItems.length / BATCH_SIZE);
+  let avgBatchTime = 0;
 
   for (let batchStart = 0; batchStart < ruleItems.length; batchStart += BATCH_SIZE) {
     if (isCancelled()) break;
 
+    const batchIndex = batchStart / BATCH_SIZE;
     const batchEnd = Math.min(batchStart + BATCH_SIZE, ruleItems.length);
     const batchMessages = commits.slice(batchStart, batchEnd).map((c) => c.commit.message);
 
+    const batchStartTime = Date.now();
     const results = await aiEvaluateBatch(batchMessages, options);
+    const batchElapsed = Date.now() - batchStartTime;
+
+    // 実測時間から平均を更新（最初のバッチで初期化）
+    if (avgBatchTime === 0) {
+      avgBatchTime = batchElapsed;
+    } else {
+      avgBatchTime = avgBatchTime * 0.7 + batchElapsed * 0.3;
+    }
+
+    const remaining = Math.round(
+      (avgBatchTime + RPM_DELAY_MS) * (totalBatches - batchIndex - 1) / 1000,
+    );
+
+    send("ai_progress", {
+      current: batchEnd,
+      total: ruleItems.length,
+      currentMessage: batchMessages[0]?.slice(0, 60) ?? "",
+      estimatedSecondsRemaining: Math.max(0, remaining),
+    });
 
     if (results.every((r) => r === null)) {
       if (isAiRpdExceeded()) {
@@ -84,7 +112,7 @@ export async function runSSEPipeline<T>(
   }
 
   if (rpdExceeded) {
-    send("rpd_exceeded", { message: "1日のAI評価上限(20件)に達しました。ルールベースの評価のみ表示します。" });
+    send("rpd_exceeded", { message: `1日のAI評価上限(${RPD_LIMIT}件)に達しました。ルールベースの評価のみ表示します。` });
   }
 
   // Phase 3b: Apply AI results through per-commit callbacks (cache hits, no API calls)

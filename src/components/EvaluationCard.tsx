@@ -11,6 +11,12 @@ type AspectScores = {
   traceability: number;
 };
 
+type AiReason =
+  | { reason: "no_key" }
+  | { reason: "rate_limited"; retryAfterSeconds?: number }
+  | { reason: "error"; message?: string }
+  | { reason: "quota_exceeded" };
+
 type EvaluationCardProps = {
   score: number;
   issues: string[];
@@ -20,6 +26,7 @@ type EvaluationCardProps = {
   passed?: boolean;
   aspectScores?: AspectScores;
   aiAvailable?: boolean;
+  aiReason?: AiReason | null;
 };
 
 const BARS = [
@@ -37,11 +44,28 @@ function barColor(pct: number) {
   return "bg-zinc-300";
 }
 
+function aiMessage(aiReason?: AiReason | null): string | null {
+  if (!aiReason) return null;
+  switch (aiReason.reason) {
+    case "no_key":
+      return "AI評価が利用できません。GEMINI_API_KEY が設定されていません。";
+    case "quota_exceeded":
+      return "AI評価の1日あたりの利用制限に達しました。明日以降に再試行してください。";
+    case "rate_limited":
+      return "AI評価のAPI制限中です。しばらく待ってから再試行してください。";
+    case "error":
+      return "AI評価でエラーが発生しました。再度試してください。";
+    default:
+      return null;
+  }
+}
+
 export function EvaluationCard({
   score, issues, suggestions, exampleMessage,
-  label = "評価結果", passed, aspectScores, aiAvailable,
+  label = "評価結果", passed, aspectScores, aiAvailable, aiReason,
 }: EvaluationCardProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const reasonMessage = aiMessage(aiReason);
 
   return (
     <div className="rounded-3xl border border-mist bg-white p-5 shadow-subtle">
@@ -56,7 +80,7 @@ export function EvaluationCard({
       {/* AI not available warning */}
       {aiAvailable === false && (
         <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-700">
-          AI評価なしの参考スコアです。「再評価する」でAIによる正確な評価を受けられます。
+          {reasonMessage || "AI評価なしの参考スコアです。「再評価する」でAIによる正確な評価を受けられます。"}
         </div>
       )}
 

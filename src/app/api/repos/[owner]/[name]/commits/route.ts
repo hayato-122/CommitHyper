@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { evaluateCommit, isMergeMessage, SCORE } from "@/lib/evaluateCommit";
+import { evaluateCommit, isMergeMessage, SCORE, type CommitEvaluationResult } from "@/lib/evaluateCommit";
 import { safeParseJson } from "@/lib/json";
 import { logger } from "@/lib/logger";
 import { createSSEStream, SSE_RESPONSE_HEADERS } from "@/lib/sse";
@@ -95,13 +95,25 @@ export async function GET(
       const githubCommits = await fetchAllCommits(owner, name, session.accessToken!, branch);
       sse.send("progress", { phase: "fetch_done", current: githubCommits.length, total: githubCommits.length, message: `${githubCommits.length}件のコミットを取得完了` });
 
+      const evaluableCommits = githubCommits.filter((c) => !isMergeMessage(c.commit.message));
+      const skippedCount = githubCommits.length - evaluableCommits.length;
+      if (skippedCount > 0) {
+        sse.send("merge_skipped", { count: skippedCount, message: `${skippedCount}件のマージコミットをスキップしました` });
+      }
+
+      // ルール評価結果のキャッシュ（onRuleEval → onRuleBatchReady 間で共有）
+      const evalResultCache = new Map<string, CommitEvaluationResult>();
+
       await runSSEPipeline(
-        githubCommits,
+        evaluableCommits,
         sse.send,
-        (commit, i, total) => onRuleEval(commit, i, total, repository.id),
+        (commit, i, total) => onRuleEval(commit, i, total, repository.id, evalResultCache),
         (item) => onAiEval(item, request.signal),
         (item) => item.currentScore,
-        { signal: request.signal },
+        {
+          signal: request.signal,
+          onRuleBatchReady: (items, commits) => onRuleBatchPersist(items, commits, repository.id, evalResultCache),
+        },
       );
 
       await prisma.repository.update({
@@ -119,51 +131,82 @@ export async function GET(
   return new Response(stream, { headers: SSE_RESPONSE_HEADERS });
 }
 
-async function onRuleEval(commit: import("@/lib/github").GitHubCommit, _i: number, _total: number, repositoryId: string): Promise<SerializedCommit> {
+async function onRuleEval(
+  commit: import("@/lib/github").GitHubCommit,
+  _i: number, _total: number,
+  _repositoryId: string,
+  cache: Map<string, CommitEvaluationResult>,
+): Promise<SerializedCommit> {
   const evalResult = evaluateCommit(commit.commit.message);
-  const status = isMergeMessage(commit.commit.message) ? "auto" :
-    evalResult.score >= SCORE.GOOD ? "excellent" : "pending";
-
-  const dbCommit = await prisma.commit.create({
-    data: {
-      repositoryId,
-      sha: commit.sha,
-      message: commit.commit.message,
-      authorName: commit.commit.author?.name ?? "",
-      authorEmail: commit.commit.author?.email ?? "",
-      committedAt: new Date(commit.commit.author?.date ?? commit.commit.committer?.date ?? Date.now()),
-      url: commit.html_url ?? "",
-      initialScore: evalResult.score,
-      currentScore: evalResult.score,
-      status,
-    },
-  });
-
-  await prisma.commitEvaluation.create({
-    data: {
-      commitId: dbCommit.id,
-      targetMessage: commit.commit.message,
-      score: evalResult.score,
-      rank: evalResult.rank,
-      issues: JSON.stringify(evalResult.issues),
-      suggestions: JSON.stringify(evalResult.suggestions),
-      exampleMessage: evalResult.exampleMessage,
-      aspectScores: evalResult.aspectScores,
-    },
-  });
+  cache.set(commit.sha, evalResult);
 
   return {
-    id: dbCommit.id,
-    sha: dbCommit.sha,
-    message: dbCommit.message,
-    authorName: dbCommit.authorName,
-    committedAt: dbCommit.committedAt.toISOString(),
-    initialScore: dbCommit.initialScore,
-    currentScore: dbCommit.currentScore,
-    status: dbCommit.status,
+    id: "",
+    sha: commit.sha,
+    message: commit.commit.message,
+    authorName: commit.commit.author?.name ?? "",
+    committedAt: new Date(commit.commit.author?.date ?? commit.commit.committer?.date ?? Date.now()).toISOString(),
+    initialScore: evalResult.score,
+    currentScore: evalResult.score,
+    status: isMergeMessage(commit.commit.message) ? "auto" : evalResult.score >= SCORE.GOOD ? "excellent" : "pending",
     firstIssue: evalResult.issues[0] ?? null,
     exampleMessage: evalResult.exampleMessage,
   };
+}
+
+async function onRuleBatchPersist(
+  items: SerializedCommit[],
+  commits: import("@/lib/github").GitHubCommit[],
+  repositoryId: string,
+  cache: Map<string, CommitEvaluationResult>,
+): Promise<SerializedCommit[]> {
+  const count = items.length;
+
+  const commitData = commits.slice(0, count).map((c) => ({
+    repositoryId,
+    sha: c.sha,
+    message: c.commit.message,
+    authorName: c.commit.author?.name ?? "",
+    authorEmail: c.commit.author?.email ?? "",
+    committedAt: new Date(c.commit.author?.date ?? c.commit.committer?.date ?? Date.now()),
+    url: c.html_url ?? "",
+    initialScore: cache.get(c.sha)!.score,
+    currentScore: cache.get(c.sha)!.score,
+    status: items.find((i) => i.sha === c.sha)?.status ?? "pending",
+  }));
+
+  const dbCommits = await prisma.commit.createManyAndReturn({ data: commitData, skipDuplicates: true });
+
+  const evalData = dbCommits.map((dc) => {
+    const r = cache.get(dc.sha)!;
+    return {
+      commitId: dc.id,
+      targetMessage: dc.message,
+      score: dc.initialScore,
+      rank: r.rank,
+      issues: JSON.stringify(r.issues),
+      suggestions: JSON.stringify(r.suggestions),
+      exampleMessage: r.exampleMessage,
+      aspectScores: r.aspectScores,
+    };
+  });
+  await prisma.commitEvaluation.createMany({ data: evalData });
+
+  return dbCommits.map((dc) => {
+    const r = cache.get(dc.sha)!;
+    return {
+      id: dc.id,
+      sha: dc.sha,
+      message: dc.message,
+      authorName: dc.authorName,
+      committedAt: dc.committedAt.toISOString(),
+      initialScore: dc.initialScore,
+      currentScore: dc.currentScore,
+      status: dc.status,
+      firstIssue: r.issues[0] ?? null,
+      exampleMessage: r.exampleMessage,
+    };
+  });
 }
 
 async function onAiEval(item: SerializedCommit, signal?: AbortSignal): Promise<SerializedCommit> {

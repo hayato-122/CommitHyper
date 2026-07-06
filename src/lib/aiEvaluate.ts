@@ -27,18 +27,27 @@ const EVALUATION_PROMPT = [
   "",
   "### 観点3: Summaryの具体性（0〜20点）",
   "変更内容を固有名詞を含めて具体的に伝えているか評価。bodyも確認すること。",
+  "✅ 具体例: `style(responsive): ヘッダー・改善ページ・サイドバーのレスポンシブ対応`",
+  "   → Summaryに「ヘッダー」「サイドバー」「レスポンシブ」などの固有名詞が含まれているので高得点。",
+  "❌ 「変更内容が全く書かれていません」というissueは、summaryが空か1単語のみの場合のみ使うこと。",
+  "   固有名詞が含まれているメッセージには使用しない。",
   "",
   "### 観点4: Why・背景の説明（0〜15点）",
   "なぜ変更が必要かが伝わるか評価。bodyが空なら0〜10の範囲に留める。",
+  "✅ bodyに変更点が箇条書きで複数列挙されている場合、背景説明があるとみなして高得点。",
+  "❌ 「なぜ変更したか不明」というissueは、bodyが完全に空の場合のみ使うこと。",
   "",
   "### scopeの提案",
   "変更内容に最適なscope（auth, ui, api, db, deps, config, ci, docs, test, perf, build, refactor）を提案。現状のscopeが適切なら空文字。",
   "",
   "### exampleMessage",
   "改善後の完全なコミットメッセージを1つ。type(scope): summary 形式。summaryは日本語で書くこと。",
+  "既に良いメッセージなら改善点を指摘しつつ、より適切なscopeや改行・表記ゆれなどの具体的改善を提案する。",
   "",
   "### issues / suggestions",
   "問題点と改善提案をそれぞれ最大3つ。",
+  "「変更内容が全く書かれていません」のような抽象的なissueではなく、",
+  "「改行で項目を整理すると読みやすい」「scopeを ui にするとより正確」のように具体的な指摘を優先する。",
 ].join("\n");
 
 const BATCH_PROMPT = [
@@ -50,18 +59,27 @@ const BATCH_PROMPT = [
   "",
   "### 観点3: Summaryの具体性（0〜20点）",
   "変更内容を固有名詞を含めて具体的に伝えているか評価。bodyも確認すること。",
+  "✅ 具体例: `style(responsive): ヘッダー・改善ページ・サイドバーのレスポンシブ対応`",
+  "   → Summaryに「ヘッダー」「サイドバー」「レスポンシブ」などの固有名詞が含まれているので高得点。",
+  "❌ 「変更内容が全く書かれていません」というissueは、summaryが空か1単語のみの場合のみ使うこと。",
+  "   固有名詞が含まれているメッセージには使用しない。",
   "",
   "### 観点4: Why・背景の説明（0〜15点）",
   "なぜ変更が必要かが伝わるか評価。bodyが空なら0〜10の範囲に留める。",
+  "✅ bodyに変更点が箇条書きで複数列挙されている場合、背景説明があるとみなして高得点。",
+  "❌ 「なぜ変更したか不明」というissueは、bodyが完全に空の場合のみ使うこと。",
   "",
   "### scopeの提案",
   "変更内容に最適なscopeを提案。現状のscopeが適切なら空文字。",
   "",
   "### issues / suggestions",
   "問題点と改善提案をそれぞれ最大3つ。",
+  "「変更内容が全く書かれていません」のような抽象的なissueではなく、",
+  "「改行で項目を整理すると読みやすい」「scopeを ui にするとより正確」のように具体的な指摘を優先する。",
   "",
   "### exampleMessage",
   "改善後の完全なコミットメッセージを1つ。type(scope): summary 形式。summaryは日本語で書くこと。",
+  "既に良いメッセージなら改善点を指摘しつつ、より適切なscopeや改行・表記ゆれなどの具体的改善を提案する。",
   "",
   "レスポンスは必ず配列形式で: [{summaryScore: 0-20, whyScore: 0-15, suggestedScope: string, issues: string[], suggestions: string[], exampleMessage: string}, ...]",
 ].join("\n");
@@ -69,7 +87,7 @@ const BATCH_PROMPT = [
 // --- Daily request counter ---
 let dailyCount = 0;
 let dailyResetDate = "";
-const RPD_LIMIT = 20;
+export const RPD_LIMIT = Number(process.env.AI_RPD_LIMIT) || 500;
 
 function checkDailyReset() {
   const today = new Date().toISOString().slice(0, 10);
@@ -87,6 +105,15 @@ export function getDailyAiCount(): number {
 export function isAiRpdExceeded(): boolean {
   checkDailyReset();
   return dailyCount >= RPD_LIMIT;
+}
+
+// --- Skip reason tracking ---
+let lastSkipReason: AiSkippedReason | null = null;
+
+export function getLastSkipReason(): AiSkippedReason | null {
+  const r = lastSkipReason;
+  lastSkipReason = null;
+  return r;
 }
 
 // --- Batch result cache ---
@@ -138,11 +165,15 @@ export async function aiEvaluateCommit(
   message: string,
   options?: { signal?: AbortSignal },
 ): Promise<AiEvaluationResult | null> {
-  if (options?.signal?.aborted) return null;
+  if (options?.signal?.aborted) {
+    lastSkipReason = { reason: "error", message: "cancelled" };
+    return null;
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.trim().length === 0) {
     logger.info("[aiEvaluate] GEMINI_API_KEY not set, skipping AI evaluation");
+    lastSkipReason = { reason: "no_key" };
     return null;
   }
 
@@ -155,6 +186,7 @@ export async function aiEvaluateCommit(
   checkDailyReset();
   if (dailyCount >= RPD_LIMIT) {
     logger.warn("[aiEvaluate] Daily request limit reached, skipping AI evaluation");
+    lastSkipReason = { reason: "quota_exceeded" };
     return null;
   }
 
@@ -172,19 +204,21 @@ export async function aiEvaluateCommit(
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 256,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json",
       },
     }, options);
 
     if (response.status === 429) {
       logger.warn("[aiEvaluate] Rate limited (429), skipping AI evaluation");
+      lastSkipReason = { reason: "rate_limited", retryAfterSeconds: 60 };
       return null;
     }
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "unknown");
       logger.error(`[aiEvaluate] Gemini API error: ${response.status} ${response.statusText}`, errorBody.slice(0, 500));
+      lastSkipReason = { reason: "error", message: `Gemini API error: ${response.status}` };
       return null;
     }
 
@@ -192,18 +226,31 @@ export async function aiEvaluateCommit(
     const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
       logger.error("[aiEvaluate] Empty response from Gemini API");
+      lastSkipReason = { reason: "error", message: "empty_response" };
       return null;
     }
 
-    const parsed = JSON.parse(text);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      logger.error("[aiEvaluate] JSON parse error, raw text (first 200):", text.slice(0, 200));
+      lastSkipReason = { reason: "error", message: "parse_error" };
+      return null;
+    }
     return parseSingleResult(parsed, message);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      if (options?.signal?.aborted) return null;
+      if (options?.signal?.aborted) {
+        lastSkipReason = { reason: "error", message: "cancelled" };
+        return null;
+      }
       logger.warn("[aiEvaluate] Timeout, skipping AI evaluation");
+      lastSkipReason = { reason: "error", message: "timeout" };
       return null;
     }
     logger.error("[aiEvaluate] Evaluation failed:", error instanceof Error ? error.message : "Unknown error");
+    lastSkipReason = { reason: "error", message: "evaluation_failed" };
     return null;
   }
 }

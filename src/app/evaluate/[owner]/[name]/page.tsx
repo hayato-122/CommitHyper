@@ -105,7 +105,37 @@ export default function EvaluatePage() {
         const data = await branchesRes.json();
         if (Array.isArray(data) && data.length > 0) {
           setBranches(data);
-          setSelectedBranch(data[0]);
+          const branch = data[0];
+          setSelectedBranch(branch);
+
+          // ローカルキャッシュがあればブランチ選択をスキップ
+          const localCache = loadLocalCache(branch);
+          if (localCache) {
+            setAllCommits(localCache);
+            setStartable(false);
+            setLoading(false);
+            return;
+          }
+
+          // サーバーキャッシュを確認
+          try {
+            const qs = new URLSearchParams({ status: "true", branch });
+            const statusRes = await fetch(`/api/evaluate/${owner}/${name}/commits?${qs}`);
+            if (statusRes.ok) {
+              const status = await statusRes.json();
+              if (status.cached) {
+                const res = await fetch(`/api/evaluate/${owner}/${name}/commits?branch=${encodeURIComponent(branch)}`);
+                if (res.ok) {
+                  const commits: EvalCommit[] = await res.json();
+                  saveLocalCache(branch, commits);
+                  setAllCommits(commits);
+                  setStartable(false);
+                  setLoading(false);
+                  return;
+                }
+              }
+            }
+          } catch { /* fall through to branch selection */ }
         }
       }
       setStartable(true);
@@ -353,7 +383,7 @@ export default function EvaluatePage() {
       />
 
       <div className="flex flex-1 flex-col md:flex-row">
-        <main className="flex-1 px-6 md:px-8 py-10">
+        <main className="flex flex-1 flex-col px-6 md:px-8 py-10">
           <div className="mb-8">
             <h1 className="text-2xl font-semibold leading-tight tracking-tight text-midnight-ink">
               {owner}/{name}
@@ -419,27 +449,29 @@ export default function EvaluatePage() {
           </div>
 
           {tab === "candidates" && (
-            <div className="space-y-4">
-              {candidateCommits.length === 0 ? (
-                <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
-                  <p className="text-lg font-medium text-zinc-700">改善候補はありません</p>
-                  <p className="mt-2 text-sm text-zinc-500">すべてのコミットメッセージが高評価です。</p>
-                </div>
-              ) : (
-                candidateCommits.map((commit) => (
-                  <ScrollReveal key={commit.sha}>
-                    <CommitCard
-                      sha={commit.sha}
-                      message={commit.message}
-                      authorName={commit.authorName}
-                      committedAt={commit.committedAt}
-                      score={commit.score}
-                      firstIssue={commit.issues[0]}
-                      improveHref={`/evaluate/${owner}/${name}/improve?sha=${commit.sha}&message=${encodeURIComponent(commit.message)}&score=${commit.score}`}
-                    />
-                  </ScrollReveal>
-                ))
-              )}
+            <div className="flex flex-col flex-1">
+              <div className="flex-1 space-y-4">
+                {candidateCommits.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center">
+                    <p className="text-lg font-medium text-zinc-700">改善候補はありません</p>
+                    <p className="mt-2 text-sm text-zinc-500">すべてのコミットメッセージが高評価です。</p>
+                  </div>
+                ) : (
+                  candidateCommits.map((commit) => (
+                    <ScrollReveal key={commit.sha}>
+                      <CommitCard
+                        sha={commit.sha}
+                        message={commit.message}
+                        authorName={commit.authorName}
+                        committedAt={commit.committedAt}
+                        score={commit.score}
+                        firstIssue={commit.issues[0]}
+                        improveHref={`/evaluate/${owner}/${name}/improve?sha=${commit.sha}&message=${encodeURIComponent(commit.message)}&score=${commit.score}`}
+                      />
+                    </ScrollReveal>
+                  ))
+                )}
+              </div>
               <Pager
                 page={page}
                 totalPages={totalPages}

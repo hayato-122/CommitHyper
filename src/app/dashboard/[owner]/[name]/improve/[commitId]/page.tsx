@@ -201,7 +201,7 @@ export default function ImprovePage() {
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: improvedMessage }),
+        body: JSON.stringify({ message: improvedMessage, branch: branchName }),
       }
     );
     const data = await res.json();
