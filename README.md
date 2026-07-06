@@ -1,6 +1,6 @@
 # 🚀 CommitHyper
 
-アプリURL : [https://commithyper.vercel.app](https://commithyper.vercel.app)
+アプリURL : [https://commit-hyper.vercel.app](https://commit-hyper.vercel.app)
 
 <img src="public/images/hero.png" width="100%" alt="CommitHyper ランディングページ">
 
